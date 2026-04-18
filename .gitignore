@@ -1,0 +1,6 @@
+node_modules/
+db/luminar.db
+db/luminar.db-wal
+db/luminar.db-shm
+uploads/
+.env

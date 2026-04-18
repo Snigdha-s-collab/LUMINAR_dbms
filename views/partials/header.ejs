@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Luminar — AI-Powered Skincare. Discover your skin type and find products perfectly matched to your unique needs.">
+    <title>Luminar — AI-Powered Skincare</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <!-- Flash Messages -->
+    <% if (typeof success !== 'undefined' && success.length > 0) { %>
+        <div class="flash-message flash-success" id="flashMsg">
+            <i class="fas fa-check-circle"></i>
+            <span><%= success[0] %></span>
+            <button onclick="this.parentElement.remove()" class="flash-close">&times;</button>
+        </div>
+    <% } %>
+    <% if (typeof error !== 'undefined' && error.length > 0) { %>
+        <div class="flash-message flash-error" id="flashMsg">
+            <i class="fas fa-exclamation-circle"></i>
+            <span><%= error[0] %></span>
+            <button onclick="this.parentElement.remove()" class="flash-close">&times;</button>
+        </div>
+    <% } %>
+
+    <!-- Navigation -->
+    <nav class="navbar" id="navbar">
+        <div class="nav-container">
+            <a href="/" class="nav-logo">
+                <span class="logo-icon">✦</span>
+                <span class="logo-text">LUMINAR</span>
+            </a>
+
+            <div class="nav-links" id="navLinks">
+                <a href="/" class="nav-link"><i class="fas fa-home"></i> Home</a>
+                <a href="/products" class="nav-link"><i class="fas fa-spa"></i> Products</a>
+                <% if (user) { %>
+                    <a href="/products?recommended=true" class="nav-link"><i class="fas fa-magic"></i> For You</a>
+                    <a href="/assistant" class="nav-link"><i class="fas fa-robot"></i> AI Assistant</a>
+                    <a href="/quiz" class="nav-link"><i class="fas fa-clipboard-list"></i> Skin Quiz</a>
+                <% } %>
+            </div>
+
+            <div class="nav-actions">
+                <% if (user) { %>
+                    <a href="/cart" class="nav-icon-btn" title="Cart">
+                        <i class="fas fa-shopping-bag"></i>
+                        <% if (cartCount > 0) { %>
+                            <span class="cart-badge" id="cartBadge"><%= cartCount %></span>
+                        <% } %>
+                    </a>
+                    <div class="nav-user-menu">
+                        <button class="nav-user-btn" id="userMenuBtn">
+                            <div class="nav-avatar"><%= user.Cust_name.charAt(0).toUpperCase() %></div>
+                            <span class="nav-username"><%= user.Cust_name.split(' ')[0] %></span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="nav-dropdown" id="userDropdown">
+                            <div class="dropdown-header">
+                                <div class="dropdown-name"><%= user.Cust_name %></div>
+                                <div class="dropdown-email"><%= user.Mail %></div>
+                                <% if (user.C_Skin_type) { %>
+                                    <span class="skin-badge"><%= user.C_Skin_type %> Skin</span>
+                                <% } %>
+                            </div>
+                            <div class="dropdown-divider"></div>
+                            <a href="/profile" class="dropdown-item"><i class="fas fa-user"></i> My Profile</a>
+                            <a href="/orders" class="dropdown-item"><i class="fas fa-box"></i> My Orders</a>
+                            <a href="/quiz" class="dropdown-item"><i class="fas fa-redo"></i> Retake Quiz</a>
+                            <div class="dropdown-divider"></div>
+                            <a href="/auth/logout" class="dropdown-item dropdown-logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                        </div>
+                    </div>
+                <% } else { %>
+                    <a href="/auth/login" class="nav-btn nav-btn-outline">Sign In</a>
+                    <a href="/auth/register" class="nav-btn nav-btn-primary">Join Luminar</a>
+                <% } %>
+
+                <button class="nav-mobile-toggle" id="mobileToggle">
+                    <span></span><span></span><span></span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">

@@ -1,0 +1,60 @@
+<%- include('partials/header') %>
+
+<section class="orders-section">
+    <div class="container">
+        <div class="page-header">
+            <h1><i class="fas fa-box"></i> My Orders</h1>
+        </div>
+
+        <% if (orders.length === 0) { %>
+            <div class="empty-state">
+                <i class="fas fa-box-open"></i>
+                <h2>No orders yet</h2>
+                <p>Start shopping and your orders will appear here!</p>
+                <a href="/products" class="btn btn-primary"><i class="fas fa-spa"></i> Browse Products</a>
+            </div>
+        <% } else { %>
+            <div class="orders-list">
+                <% orders.forEach(order => { %>
+                    <a href="/orders/<%= order.Order_id %>" class="order-card">
+                        <div class="order-card-header">
+                            <div class="order-id">
+                                <span class="order-label">Order</span>
+                                <span class="order-number">#<%= order.Order_id %></span>
+                            </div>
+                            <span class="order-status status-<%= order.Order_status.toLowerCase().replace(/ /g, '-') %>">
+                                <i class="fas fa-<%= order.Order_status === 'Delivered' ? 'check-circle' : order.Order_status === 'Cancelled' ? 'times-circle' : order.Order_status === 'Shipped' ? 'truck' : 'clock' %>"></i>
+                                <%= order.Order_status %>
+                            </span>
+                        </div>
+                        <div class="order-card-body">
+                            <div class="order-detail-item">
+                                <i class="fas fa-calendar"></i>
+                                <span><%= new Date(order.Order_date).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' }) %></span>
+                            </div>
+                            <div class="order-detail-item">
+                                <i class="fas fa-shopping-bag"></i>
+                                <span><%= order.item_count %> item(s)</span>
+                            </div>
+                            <div class="order-detail-item">
+                                <i class="fas fa-rupee-sign"></i>
+                                <span>₹<%= order.tot_amt.toLocaleString('en-IN') %></span>
+                            </div>
+                            <% if (order.Pay_method) { %>
+                                <div class="order-detail-item">
+                                    <i class="fas fa-credit-card"></i>
+                                    <span><%= order.Pay_method %> — <span class="pay-status-<%= (order.Pay_status || '').toLowerCase() %>"><%= order.Pay_status %></span></span>
+                                </div>
+                            <% } %>
+                        </div>
+                        <div class="order-card-footer">
+                            <span>View Details <i class="fas fa-arrow-right"></i></span>
+                        </div>
+                    </a>
+                <% }) %>
+            </div>
+        <% } %>
+    </div>
+</section>
+
+<%- include('partials/footer') %>

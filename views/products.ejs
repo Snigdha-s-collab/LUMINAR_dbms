@@ -1,0 +1,151 @@
+<%- include('partials/header') %>
+
+<section class="products-section">
+    <div class="container">
+        <div class="products-header">
+            <div>
+                <% if (filters.recommended === 'true') { %>
+                    <span class="section-badge">Personalized</span>
+                    <h1>Recommended for You</h1>
+                    <p>Products matched to your <strong><%= user ? user.C_Skin_type : '' %></strong> skin type</p>
+                <% } else { %>
+                    <span class="section-badge">Shop</span>
+                    <h1>All Products</h1>
+                    <p>Explore our curated skincare collection</p>
+                <% } %>
+            </div>
+            <div class="products-count"><%= products.length %> products found</div>
+        </div>
+
+        <div class="products-layout">
+            <!-- Filters Sidebar -->
+            <aside class="filters-sidebar" id="filtersSidebar">
+                <div class="filters-header">
+                    <h3><i class="fas fa-filter"></i> Filters</h3>
+                    <a href="/products" class="filter-clear">Clear All</a>
+                </div>
+
+                <form method="GET" action="/products" id="filterForm">
+                    <% if (filters.recommended) { %>
+                        <input type="hidden" name="recommended" value="true">
+                    <% } %>
+
+                    <!-- Search -->
+                    <div class="filter-group">
+                        <label>Search</label>
+                        <div class="search-input">
+                            <i class="fas fa-search"></i>
+                            <input type="text" name="search" placeholder="Search products..." value="<%= filters.search || '' %>">
+                        </div>
+                    </div>
+
+                    <!-- Category -->
+                    <div class="filter-group">
+                        <label>Category</label>
+                        <div class="filter-options">
+                            <label class="filter-option">
+                                <input type="radio" name="category" value="" <%= !filters.category ? 'checked' : '' %>> All
+                            </label>
+                            <% categories.forEach(cat => { %>
+                                <label class="filter-option">
+                                    <input type="radio" name="category" value="<%= cat.Category %>" <%= filters.category === cat.Category ? 'checked' : '' %>>
+                                    <%= cat.Category %>
+                                </label>
+                            <% }) %>
+                        </div>
+                    </div>
+
+                    <!-- Skin Type -->
+                    <div class="filter-group">
+                        <label>Skin Type</label>
+                        <div class="filter-options">
+                            <label class="filter-option">
+                                <input type="radio" name="skin_type" value="" <%= !filters.skin_type ? 'checked' : '' %>> All
+                            </label>
+                            <% skinTypes.forEach(st => { %>
+                                <label class="filter-option">
+                                    <input type="radio" name="skin_type" value="<%= st %>" <%= filters.skin_type === st ? 'checked' : '' %>>
+                                    <%= st %>
+                                </label>
+                            <% }) %>
+                        </div>
+                    </div>
+
+                    <!-- Brand -->
+                    <div class="filter-group">
+                        <label>Brand</label>
+                        <select name="brand" class="filter-select">
+                            <option value="">All Brands</option>
+                            <% brands.forEach(b => { %>
+                                <option value="<%= b.Brand_id %>" <%= filters.brand == b.Brand_id ? 'selected' : '' %>><%= b.Brand_name %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+
+                    <!-- Sort -->
+                    <div class="filter-group">
+                        <label>Sort By</label>
+                        <select name="sort" class="filter-select">
+                            <option value="" <%= !filters.sort ? 'selected' : '' %>>Newest</option>
+                            <option value="price_asc" <%= filters.sort === 'price_asc' ? 'selected' : '' %>>Price: Low → High</option>
+                            <option value="price_desc" <%= filters.sort === 'price_desc' ? 'selected' : '' %>>Price: High → Low</option>
+                            <option value="rating" <%= filters.sort === 'rating' ? 'selected' : '' %>>Top Rated</option>
+                            <option value="name" <%= filters.sort === 'name' ? 'selected' : '' %>>Name A-Z</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-full">Apply Filters</button>
+                </form>
+            </aside>
+
+            <!-- Products Grid -->
+            <div class="products-main">
+                <button class="filter-mobile-toggle btn btn-glass" onclick="document.getElementById('filtersSidebar').classList.toggle('open')">
+                    <i class="fas fa-filter"></i> Filters
+                </button>
+
+                <% if (products.length === 0) { %>
+                    <div class="empty-state">
+                        <i class="fas fa-search"></i>
+                        <h2>No products found</h2>
+                        <p>Try adjusting your filters or <a href="/products">browse all products</a></p>
+                    </div>
+                <% } else { %>
+                    <div class="products-grid">
+                        <% products.forEach(product => { %>
+                            <a href="/products/<%= product.Product_id %>" class="product-card">
+                                <div class="product-image">
+                                    <div class="product-placeholder-img">
+                                        <i class="fas fa-pump-soap"></i>
+                                    </div>
+                                    <span class="product-badge skin-<%= product.P_Skin_type.toLowerCase() %>"><%= product.P_Skin_type %></span>
+                                    <% if (user && user.C_Skin_type && (product.P_Skin_type === user.C_Skin_type || product.P_Skin_type === 'All')) { %>
+                                        <span class="product-match-badge"><i class="fas fa-check-circle"></i> Matches You</span>
+                                    <% } %>
+                                </div>
+                                <div class="product-info">
+                                    <span class="product-brand"><%= product.Brand_name %></span>
+                                    <h3 class="product-name"><%= product.Product_name %></h3>
+                                    <div class="product-rating">
+                                        <div class="stars">
+                                            <% for (let i = 1; i <= 5; i++) { %>
+                                                <i class="fas fa-star<%= i <= Math.round(product.avg_rating) ? '' : ' empty' %>"></i>
+                                            <% } %>
+                                        </div>
+                                        <span>(<%= product.review_count %>)</span>
+                                    </div>
+                                    <div class="product-meta">
+                                        <span class="product-category"><%= product.Category %></span>
+                                        <span class="product-price">₹<%= product.Price.toLocaleString('en-IN') %></span>
+                                    </div>
+                                </div>
+                            </a>
+                        <% }) %>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </div>
+</section>
+
+<%- include('partials/footer') %>

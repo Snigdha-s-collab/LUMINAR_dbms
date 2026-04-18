@@ -1,0 +1,133 @@
+<%- include('partials/header') %>
+
+<section class="quiz-section">
+    <div class="container">
+        <div class="quiz-container">
+            <div class="quiz-header">
+                <span class="section-badge">Skin Type Quiz</span>
+                <h1>Discover Your Skin Type</h1>
+                <p>Answer these questions to find your perfect skincare match. It takes less than 2 minutes!</p>
+            </div>
+
+            <div class="quiz-progress">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 10%"></div>
+                </div>
+                <span class="progress-text" id="progressText">Question 1 of <%= questions.length %></span>
+            </div>
+
+            <form action="/quiz/submit" method="POST" id="quizForm">
+                <% questions.forEach((q, index) => { %>
+                    <div class="quiz-question<%= index === 0 ? ' active' : '' %>" id="question-<%= index %>" data-question="<%= index %>">
+                        <div class="question-number">Question <%= index + 1 %></div>
+                        <h2 class="question-text"><%= q.question %></h2>
+
+                        <div class="options-grid<%= q.multiSelect ? ' multi-select' : '' %>">
+                            <% if (q.multiSelect) { %>
+                                <% q.options.forEach((opt, optIdx) => { %>
+                                    <label class="option-card checkbox-option">
+                                        <input type="checkbox" name="q<%= q.id %>" value="<%= opt.value %>">
+                                        <div class="option-content">
+                                            <span class="option-check"><i class="fas fa-check"></i></span>
+                                            <span class="option-text"><%= opt.text %></span>
+                                        </div>
+                                    </label>
+                                <% }) %>
+                            <% } else if (q.isInfo) { %>
+                                <% q.options.forEach((opt, optIdx) => { %>
+                                    <label class="option-card">
+                                        <input type="radio" name="q<%= q.id %>" value="<%= opt.value %>" required>
+                                        <div class="option-content">
+                                            <span class="option-radio"></span>
+                                            <span class="option-text"><%= opt.text %></span>
+                                        </div>
+                                    </label>
+                                <% }) %>
+                            <% } else { %>
+                                <% q.options.forEach((opt, optIdx) => { %>
+                                    <label class="option-card">
+                                        <input type="radio" name="q<%= q.id %>" value="<%= optIdx %>" required>
+                                        <div class="option-content">
+                                            <span class="option-radio"></span>
+                                            <span class="option-text"><%= opt.text %></span>
+                                        </div>
+                                    </label>
+                                <% }) %>
+                            <% } %>
+                        </div>
+
+                        <div class="quiz-nav">
+                            <% if (index > 0) { %>
+                                <button type="button" class="btn btn-glass quiz-prev" onclick="prevQuestion(<%= index %>)">
+                                    <i class="fas fa-arrow-left"></i> Previous
+                                </button>
+                            <% } else { %>
+                                <div></div>
+                            <% } %>
+                            <% if (index < questions.length - 1) { %>
+                                <button type="button" class="btn btn-primary quiz-next" onclick="nextQuestion(<%= index %>)">
+                                    Next <i class="fas fa-arrow-right"></i>
+                                </button>
+                            <% } else { %>
+                                <button type="submit" class="btn btn-primary quiz-submit">
+                                    <i class="fas fa-sparkles"></i> Discover My Skin Type
+                                </button>
+                            <% } %>
+                        </div>
+                    </div>
+                <% }) %>
+            </form>
+        </div>
+    </div>
+</section>
+
+<script>
+const totalQuestions = <%= questions.length %>;
+
+function nextQuestion(current) {
+    const currentQ = document.getElementById(`question-${current}`);
+    const nextQ = document.getElementById(`question-${current + 1}`);
+    
+    // Check if current question is answered
+    const inputs = currentQ.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+    const isMulti = currentQ.querySelector('.multi-select');
+    if (!isMulti) {
+        const checked = currentQ.querySelector('input:checked');
+        if (!checked) {
+            currentQ.classList.add('shake');
+            setTimeout(() => currentQ.classList.remove('shake'), 500);
+            return;
+        }
+    }
+    
+    currentQ.classList.remove('active');
+    currentQ.classList.add('slide-left');
+    setTimeout(() => {
+        currentQ.classList.remove('slide-left');
+        nextQ.classList.add('active', 'slide-right');
+        setTimeout(() => nextQ.classList.remove('slide-right'), 300);
+    }, 300);
+    
+    updateProgress(current + 2);
+}
+
+function prevQuestion(current) {
+    const currentQ = document.getElementById(`question-${current}`);
+    const prevQ = document.getElementById(`question-${current - 1}`);
+    
+    currentQ.classList.remove('active');
+    setTimeout(() => {
+        prevQ.classList.add('active');
+    }, 200);
+    
+    updateProgress(current);
+}
+
+function updateProgress(questionNum) {
+    const pct = (questionNum / totalQuestions) * 100;
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressText').textContent = `Question ${questionNum} of ${totalQuestions}`;
+}
+</script>
+
+<%- include('partials/footer') %>

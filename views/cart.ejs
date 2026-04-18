@@ -1,0 +1,81 @@
+<%- include('partials/header') %>
+
+<section class="cart-section">
+    <div class="container">
+        <div class="page-header">
+            <h1><i class="fas fa-shopping-bag"></i> Shopping Cart</h1>
+        </div>
+
+        <% if (items.length === 0) { %>
+            <div class="empty-state">
+                <i class="fas fa-shopping-cart"></i>
+                <h2>Your cart is empty</h2>
+                <p>Discover amazing skincare products personalized for your skin type.</p>
+                <a href="/products" class="btn btn-primary"><i class="fas fa-spa"></i> Browse Products</a>
+            </div>
+        <% } else { %>
+            <div class="cart-layout">
+                <div class="cart-items">
+                    <% items.forEach(item => { %>
+                        <div class="cart-item" id="cart-item-<%= item.Product_id %>">
+                            <div class="cart-item-image">
+                                <div class="product-placeholder-img small"><i class="fas fa-pump-soap"></i></div>
+                            </div>
+                            <div class="cart-item-info">
+                                <span class="cart-item-brand"><%= item.Brand_name %></span>
+                                <h3><a href="/products/<%= item.Product_id %>"><%= item.Product_name %></a></h3>
+                                <span class="product-badge skin-<%= item.P_Skin_type.toLowerCase() %> small"><%= item.P_Skin_type %></span>
+                            </div>
+                            <div class="cart-item-price">₹<%= item.Price.toLocaleString('en-IN') %></div>
+                            <div class="cart-item-qty">
+                                <form action="/cart/update" method="POST" class="qty-form">
+                                    <input type="hidden" name="productId" value="<%= item.Product_id %>">
+                                    <button type="submit" name="quantity" value="<%= item.Quantity - 1 %>" class="qty-btn">-</button>
+                                    <span class="qty-val"><%= item.Quantity %></span>
+                                    <button type="submit" name="quantity" value="<%= item.Quantity + 1 %>" class="qty-btn">+</button>
+                                </form>
+                            </div>
+                            <div class="cart-item-subtotal">₹<%= (item.Price * item.Quantity).toLocaleString('en-IN') %></div>
+                            <form action="/cart/remove" method="POST">
+                                <input type="hidden" name="productId" value="<%= item.Product_id %>">
+                                <button type="submit" class="cart-remove-btn" title="Remove"><i class="fas fa-trash"></i></button>
+                            </form>
+                        </div>
+                    <% }) %>
+                </div>
+
+                <div class="cart-summary">
+                    <h3>Order Summary</h3>
+                    <div class="summary-row">
+                        <span>Subtotal (<%= items.length %> items)</span>
+                        <span>₹<%= total.toLocaleString('en-IN') %></span>
+                    </div>
+                    <div class="summary-row">
+                        <span>Shipping</span>
+                        <span><%= total > 999 ? '<span class="text-success">FREE</span>' : '₹99' %></span>
+                    </div>
+                    <div class="summary-row">
+                        <span>Tax (18% GST)</span>
+                        <span>₹<%= Math.round(total * 0.18).toLocaleString('en-IN') %></span>
+                    </div>
+                    <div class="summary-divider"></div>
+                    <div class="summary-row total">
+                        <span>Total</span>
+                        <span>₹<%= (total + (total > 999 ? 0 : 99) + Math.round(total * 0.18)).toLocaleString('en-IN') %></span>
+                    </div>
+                    <% if (total < 999) { %>
+                        <div class="free-shipping-note">
+                            <i class="fas fa-truck"></i> Add ₹<%= (999 - total).toLocaleString('en-IN') %> more for free shipping!
+                        </div>
+                    <% } %>
+                    <a href="/orders/checkout" class="btn btn-primary btn-full btn-lg">
+                        <i class="fas fa-credit-card"></i> Proceed to Checkout
+                    </a>
+                    <a href="/products" class="btn btn-glass btn-full">Continue Shopping</a>
+                </div>
+            </div>
+        <% } %>
+    </div>
+</section>
+
+<%- include('partials/footer') %>

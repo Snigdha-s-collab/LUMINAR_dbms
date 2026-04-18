@@ -1,0 +1,161 @@
+<%- include('partials/header') %>
+
+<section class="checkout-section">
+    <div class="container">
+        <div class="page-header">
+            <h1><i class="fas fa-credit-card"></i> Checkout</h1>
+        </div>
+
+        <form action="/orders/create" method="POST" id="checkoutForm">
+            <div class="checkout-layout">
+                <div class="checkout-form">
+                    <!-- Shipping Address -->
+                    <div class="checkout-card">
+                        <h3><i class="fas fa-map-marker-alt"></i> Shipping Address</h3>
+                        <div class="form-group">
+                            <label>Full Address *</label>
+                            <textarea name="address" rows="3" required placeholder="House/Flat No, Street, Landmark, City, State, PIN Code"><%= user.City ? user.City : '' %></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Payment Method -->
+                    <div class="checkout-card">
+                        <h3><i class="fas fa-wallet"></i> Payment Method</h3>
+                        <div class="payment-methods">
+                            <label class="payment-option" id="pm-card">
+                                <input type="radio" name="payMethod" value="Credit Card" checked onchange="showPaymentFields(this.value)">
+                                <div class="payment-option-content">
+                                    <i class="fas fa-credit-card"></i>
+                                    <div>
+                                        <strong>Credit / Debit Card</strong>
+                                        <small>Visa, Mastercard, RuPay</small>
+                                    </div>
+                                </div>
+                            </label>
+                            <label class="payment-option" id="pm-upi">
+                                <input type="radio" name="payMethod" value="UPI" onchange="showPaymentFields(this.value)">
+                                <div class="payment-option-content">
+                                    <i class="fas fa-mobile-alt"></i>
+                                    <div>
+                                        <strong>UPI</strong>
+                                        <small>Google Pay, PhonePe, Paytm</small>
+                                    </div>
+                                </div>
+                            </label>
+                            <label class="payment-option" id="pm-net">
+                                <input type="radio" name="payMethod" value="Net Banking" onchange="showPaymentFields(this.value)">
+                                <div class="payment-option-content">
+                                    <i class="fas fa-university"></i>
+                                    <div>
+                                        <strong>Net Banking</strong>
+                                        <small>All major banks</small>
+                                    </div>
+                                </div>
+                            </label>
+                            <label class="payment-option" id="pm-cod">
+                                <input type="radio" name="payMethod" value="Cash on Delivery" onchange="showPaymentFields(this.value)">
+                                <div class="payment-option-content">
+                                    <i class="fas fa-money-bill-wave"></i>
+                                    <div>
+                                        <strong>Cash on Delivery</strong>
+                                        <small>Pay when you receive</small>
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+
+                        <!-- Card Fields -->
+                        <div class="payment-fields" id="cardFields">
+                            <div class="form-group">
+                                <label>Card Number</label>
+                                <input type="text" name="cardNumber" placeholder="1234 5678 9012 3456" maxlength="19" oninput="formatCardNumber(this)">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Expiry Date</label>
+                                    <input type="text" name="cardExpiry" placeholder="MM/YY" maxlength="5" oninput="formatExpiry(this)">
+                                </div>
+                                <div class="form-group">
+                                    <label>CVV</label>
+                                    <input type="password" name="cardCvv" placeholder="•••" maxlength="4">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- UPI Fields -->
+                        <div class="payment-fields hidden" id="upiFields">
+                            <div class="form-group">
+                                <label>UPI ID</label>
+                                <input type="text" name="upiId" placeholder="yourname@paytm">
+                            </div>
+                        </div>
+
+                        <div class="payment-secure">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>Your payment information is secure and encrypted</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Order Summary -->
+                <div class="checkout-summary">
+                    <div class="checkout-card sticky">
+                        <h3>Order Summary</h3>
+                        <div class="checkout-items">
+                            <% items.forEach(item => { %>
+                                <div class="checkout-item">
+                                    <div class="checkout-item-info">
+                                        <span class="checkout-item-name"><%= item.Product_name %></span>
+                                        <span class="checkout-item-qty">x<%= item.Quantity %></span>
+                                    </div>
+                                    <span class="checkout-item-price">₹<%= (item.Price * item.Quantity).toLocaleString('en-IN') %></span>
+                                </div>
+                            <% }) %>
+                        </div>
+                        <div class="summary-divider"></div>
+                        <div class="summary-row"><span>Subtotal</span><span>₹<%= subtotal.toLocaleString('en-IN') %></span></div>
+                        <div class="summary-row"><span>Shipping</span><span><%= shipping === 0 ? '<span class="text-success">FREE</span>' : '₹' + shipping %></span></div>
+                        <div class="summary-row"><span>Tax (GST 18%)</span><span>₹<%= tax.toLocaleString('en-IN') %></span></div>
+                        <div class="summary-divider"></div>
+                        <div class="summary-row total"><span>Total</span><span>₹<%= total.toLocaleString('en-IN') %></span></div>
+
+                        <button type="submit" class="btn btn-primary btn-full btn-lg" id="payBtn">
+                            <i class="fas fa-lock"></i> Pay ₹<%= total.toLocaleString('en-IN') %>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</section>
+
+<script>
+function showPaymentFields(method) {
+    document.getElementById('cardFields').classList.add('hidden');
+    document.getElementById('upiFields').classList.add('hidden');
+    if (method === 'Credit Card' || method === 'Debit Card') {
+        document.getElementById('cardFields').classList.remove('hidden');
+    } else if (method === 'UPI') {
+        document.getElementById('upiFields').classList.remove('hidden');
+    }
+}
+
+function formatCardNumber(input) {
+    let v = input.value.replace(/\D/g, '').substring(0, 16);
+    input.value = v.replace(/(.{4})/g, '$1 ').trim();
+}
+
+function formatExpiry(input) {
+    let v = input.value.replace(/\D/g, '').substring(0, 4);
+    if (v.length >= 2) v = v.substring(0, 2) + '/' + v.substring(2);
+    input.value = v;
+}
+
+document.getElementById('checkoutForm').addEventListener('submit', function(e) {
+    const btn = document.getElementById('payBtn');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing Payment...';
+    btn.disabled = true;
+});
+</script>
+
+<%- include('partials/footer') %>

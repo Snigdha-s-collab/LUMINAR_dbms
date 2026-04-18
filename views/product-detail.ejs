@@ -1,0 +1,200 @@
+<%- include('partials/header') %>
+
+<section class="product-detail-section">
+    <div class="container">
+        <div class="breadcrumb">
+            <a href="/">Home</a> <i class="fas fa-chevron-right"></i>
+            <a href="/products">Products</a> <i class="fas fa-chevron-right"></i>
+            <a href="/products?category=<%= product.Category %>"><%= product.Category %></a> <i class="fas fa-chevron-right"></i>
+            <span><%= product.Product_name %></span>
+        </div>
+
+        <div class="product-detail">
+            <div class="product-detail-image">
+                <div class="product-detail-placeholder">
+                    <i class="fas fa-pump-soap"></i>
+                    <span><%= product.Category %></span>
+                </div>
+                <span class="product-badge skin-<%= product.P_Skin_type.toLowerCase() %>"><%= product.P_Skin_type %> Skin</span>
+            </div>
+
+            <div class="product-detail-info">
+                <div class="product-detail-brand">
+                    <span class="brand-tag"><%= product.Brand_name %></span>
+                    <span class="country-tag"><i class="fas fa-globe"></i> <%= product.Country %></span>
+                </div>
+
+                <h1 class="product-detail-name"><%= product.Product_name %></h1>
+
+                <div class="product-detail-rating">
+                    <div class="stars">
+                        <% const avgRating = reviews.length > 0 ? (reviews.reduce((s,r) => s + r.Rating, 0) / reviews.length) : 0; %>
+                        <% for (let i = 1; i <= 5; i++) { %>
+                            <i class="fas fa-star<%= i <= Math.round(avgRating) ? '' : ' empty' %>"></i>
+                        <% } %>
+                    </div>
+                    <span><%= avgRating.toFixed(1) %> (<%= reviews.length %> reviews)</span>
+                </div>
+
+                <div class="product-detail-price">₹<%= product.Price.toLocaleString('en-IN') %></div>
+
+                <p class="product-detail-desc"><%= product.Description %></p>
+
+                <% if (product.Ingredients) { %>
+                    <div class="product-detail-section">
+                        <h3><i class="fas fa-flask"></i> Key Ingredients</h3>
+                        <p><%= product.Ingredients %></p>
+                    </div>
+                <% } %>
+
+                <% if (product.How_to_use) { %>
+                    <div class="product-detail-section">
+                        <h3><i class="fas fa-hand-holding-water"></i> How to Use</h3>
+                        <p><%= product.How_to_use %></p>
+                    </div>
+                <% } %>
+
+                <div class="product-detail-tags">
+                    <span class="tag"><i class="fas fa-tag"></i> <%= product.Category %></span>
+                    <span class="tag skin-<%= product.P_Skin_type.toLowerCase() %>"><i class="fas fa-heart"></i> For <%= product.P_Skin_type %> Skin</span>
+                    <% if (user && user.C_Skin_type && (product.P_Skin_type === user.C_Skin_type || product.P_Skin_type === 'All')) { %>
+                        <span class="tag tag-match"><i class="fas fa-check-circle"></i> Perfect Match for You!</span>
+                    <% } %>
+                </div>
+
+                <% if (user) { %>
+                    <form action="/cart/add" method="POST" class="add-to-cart-form">
+                        <input type="hidden" name="productId" value="<%= product.Product_id %>">
+                        <div class="quantity-selector">
+                            <button type="button" class="qty-btn" onclick="changeQty(-1)">-</button>
+                            <input type="number" name="quantity" value="1" min="1" max="10" id="qtyInput">
+                            <button type="button" class="qty-btn" onclick="changeQty(1)">+</button>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-lg add-to-cart-btn">
+                            <i class="fas fa-shopping-bag"></i> Add to Cart
+                        </button>
+                    </form>
+                <% } else { %>
+                    <a href="/auth/login" class="btn btn-primary btn-lg"><i class="fas fa-sign-in-alt"></i> Login to Purchase</a>
+                <% } %>
+            </div>
+        </div>
+
+        <!-- Reviews Section -->
+        <div class="reviews-section">
+            <h2 class="reviews-title"><i class="fas fa-comments"></i> Customer Reviews (<%= reviews.length %>)</h2>
+
+            <div class="reviews-layout">
+                <div class="reviews-summary">
+                    <div class="rating-big">
+                        <span class="rating-number"><%= avgRating.toFixed(1) %></span>
+                        <div class="stars">
+                            <% for (let i = 1; i <= 5; i++) { %>
+                                <i class="fas fa-star<%= i <= Math.round(avgRating) ? '' : ' empty' %>"></i>
+                            <% } %>
+                        </div>
+                        <span class="rating-total"><%= reviews.length %> reviews</span>
+                    </div>
+                    <div class="rating-bars">
+                        <% for (let r = 5; r >= 1; r--) { %>
+                            <div class="rating-bar-row">
+                                <span><%= r %> <i class="fas fa-star"></i></span>
+                                <div class="rating-bar-bg">
+                                    <div class="rating-bar-fill" style="width: <%= reviews.length > 0 ? (ratingDist[r-1] / reviews.length * 100) : 0 %>%"></div>
+                                </div>
+                                <span><%= ratingDist[r-1] %></span>
+                            </div>
+                        <% } %>
+                    </div>
+                </div>
+
+                <div class="reviews-list">
+                    <% if (canReview && user) { %>
+                        <div class="review-form-card">
+                            <h3>Write a Review</h3>
+                            <form action="/reviews" method="POST">
+                                <input type="hidden" name="productId" value="<%= product.Product_id %>">
+                                <div class="star-rating-input">
+                                    <% for (let i = 5; i >= 1; i--) { %>
+                                        <input type="radio" name="rating" value="<%= i %>" id="star<%= i %>" required>
+                                        <label for="star<%= i %>"><i class="fas fa-star"></i></label>
+                                    <% } %>
+                                </div>
+                                <textarea name="comment" placeholder="Share your experience with this product..." rows="3"></textarea>
+                                <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Submit Review</button>
+                            </form>
+                        </div>
+                    <% } %>
+
+                    <% if (reviews.length === 0) { %>
+                        <div class="empty-state small">
+                            <i class="fas fa-comment-slash"></i>
+                            <p>No reviews yet. Be the first to review!</p>
+                        </div>
+                    <% } else { %>
+                        <% reviews.forEach(review => { %>
+                            <div class="review-card">
+                                <div class="review-header">
+                                    <div class="review-avatar"><%= review.Cust_name.charAt(0).toUpperCase() %></div>
+                                    <div>
+                                        <div class="review-name"><%= review.Cust_name %></div>
+                                        <div class="review-date"><%= new Date(review.Created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' }) %></div>
+                                    </div>
+                                    <div class="review-stars">
+                                        <% for (let i = 1; i <= 5; i++) { %>
+                                            <i class="fas fa-star<%= i <= review.Rating ? '' : ' empty' %>"></i>
+                                        <% } %>
+                                    </div>
+                                </div>
+                                <% if (review.Comment) { %>
+                                    <p class="review-comment"><%= review.Comment %></p>
+                                <% } %>
+                                <% if (user && user.Cust_id === review.Cust_id) { %>
+                                    <form action="/reviews/delete" method="POST" class="review-delete">
+                                        <input type="hidden" name="reviewId" value="<%= review.review_id %>">
+                                        <input type="hidden" name="productId" value="<%= product.Product_id %>">
+                                        <button type="submit" class="btn-text-danger"><i class="fas fa-trash"></i> Delete</button>
+                                    </form>
+                                <% } %>
+                            </div>
+                        <% }) %>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+
+        <!-- Related Products -->
+        <% if (related.length > 0) { %>
+            <div class="related-section">
+                <h2 class="section-title">You May Also Like</h2>
+                <div class="products-grid">
+                    <% related.forEach(prod => { %>
+                        <a href="/products/<%= prod.Product_id %>" class="product-card">
+                            <div class="product-image">
+                                <div class="product-placeholder-img"><i class="fas fa-pump-soap"></i></div>
+                                <span class="product-badge skin-<%= prod.P_Skin_type.toLowerCase() %>"><%= prod.P_Skin_type %></span>
+                            </div>
+                            <div class="product-info">
+                                <span class="product-brand"><%= prod.Brand_name %></span>
+                                <h3 class="product-name"><%= prod.Product_name %></h3>
+                                <span class="product-price">₹<%= prod.Price.toLocaleString('en-IN') %></span>
+                            </div>
+                        </a>
+                    <% }) %>
+                </div>
+            </div>
+        <% } %>
+    </div>
+</section>
+
+<script>
+function changeQty(delta) {
+    const input = document.getElementById('qtyInput');
+    let val = parseInt(input.value) + delta;
+    if (val < 1) val = 1;
+    if (val > 10) val = 10;
+    input.value = val;
+}
+</script>
+
+<%- include('partials/footer') %>

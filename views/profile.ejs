@@ -1,0 +1,127 @@
+<%- include('partials/header') %>
+
+<section class="profile-section">
+    <div class="container">
+        <div class="profile-header">
+            <div class="profile-avatar-large"><%= user.Cust_name.charAt(0).toUpperCase() %></div>
+            <div class="profile-header-info">
+                <h1><%= user.Cust_name %></h1>
+                <p><%= user.Mail %></p>
+                <div class="profile-tags">
+                    <% if (user.C_Skin_type) { %>
+                        <span class="skin-badge lg"><i class="fas fa-heart"></i> <%= user.C_Skin_type %> Skin</span>
+                    <% } %>
+                    <% if (user.City) { %>
+                        <span class="tag"><i class="fas fa-map-marker-alt"></i> <%= user.City %></span>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+
+        <div class="profile-grid">
+            <!-- Skin Profile -->
+            <div class="profile-card">
+                <h3><i class="fas fa-spa"></i> Skin Profile</h3>
+                <% if (quizResult) { %>
+                    <div class="skin-result">
+                        <div class="skin-type-display">
+                            <span class="skin-type-name"><%= quizResult.determined_skin_type %></span>
+                            <span class="skin-match"><%= quizResult.match_percentage %>% match</span>
+                        </div>
+                        <% if (user.Skin_concerns) { %>
+                            <div class="concerns-list">
+                                <strong>Your Concerns:</strong>
+                                <div class="concern-tags">
+                                    <% user.Skin_concerns.split(',').forEach(c => { %>
+                                        <span class="concern-tag"><%= c.trim() %></span>
+                                    <% }) %>
+                                </div>
+                            </div>
+                        <% } %>
+                        <p class="quiz-date">Quiz taken: <%= new Date(quizResult.Created_at).toLocaleDateString('en-IN') %></p>
+                    </div>
+                <% } else { %>
+                    <div class="empty-state small">
+                        <p>You haven't taken the skin quiz yet</p>
+                        <a href="/quiz" class="btn btn-primary btn-sm"><i class="fas fa-clipboard-list"></i> Take Quiz Now</a>
+                    </div>
+                <% } %>
+                <a href="/quiz" class="btn btn-glass btn-sm btn-full"><i class="fas fa-redo"></i> Retake Quiz</a>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="profile-card">
+                <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
+                <div class="quick-actions">
+                    <a href="/products?recommended=true" class="quick-action-btn">
+                        <i class="fas fa-magic"></i>
+                        <span>My Recommendations</span>
+                    </a>
+                    <a href="/assistant" class="quick-action-btn">
+                        <i class="fas fa-robot"></i>
+                        <span>AI Assistant</span>
+                    </a>
+                    <a href="/orders" class="quick-action-btn">
+                        <i class="fas fa-box"></i>
+                        <span>My Orders</span>
+                    </a>
+                    <a href="/cart" class="quick-action-btn">
+                        <i class="fas fa-shopping-bag"></i>
+                        <span>My Cart</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Recent Orders -->
+            <div class="profile-card wide">
+                <h3><i class="fas fa-box"></i> Recent Orders</h3>
+                <% if (orders.length > 0) { %>
+                    <div class="recent-orders-table">
+                        <% orders.forEach(order => { %>
+                            <a href="/orders/<%= order.Order_id %>" class="recent-order-row">
+                                <span class="order-id-mini">#<%= order.Order_id %></span>
+                                <span class="order-date-mini"><%= new Date(order.Order_date).toLocaleDateString('en-IN') %></span>
+                                <span class="order-amt-mini">₹<%= order.tot_amt.toLocaleString('en-IN') %></span>
+                                <span class="order-status status-<%= order.Order_status.toLowerCase().replace(/ /g, '-') %>"><%= order.Order_status %></span>
+                            </a>
+                        <% }) %>
+                    </div>
+                    <a href="/orders" class="btn btn-glass btn-sm">View All Orders</a>
+                <% } else { %>
+                    <div class="empty-state small">
+                        <p>No orders yet</p>
+                        <a href="/products" class="btn btn-primary btn-sm">Start Shopping</a>
+                    </div>
+                <% } %>
+            </div>
+
+            <!-- Recent Reviews -->
+            <div class="profile-card wide">
+                <h3><i class="fas fa-star"></i> My Reviews</h3>
+                <% if (reviews.length > 0) { %>
+                    <% reviews.forEach(review => { %>
+                        <div class="profile-review">
+                            <div class="profile-review-header">
+                                <a href="/products/<%= review.Product_id %>" class="review-product-name"><%= review.Product_name %></a>
+                                <div class="stars small">
+                                    <% for (let i = 1; i <= 5; i++) { %>
+                                        <i class="fas fa-star<%= i <= review.Rating ? '' : ' empty' %>"></i>
+                                    <% } %>
+                                </div>
+                            </div>
+                            <% if (review.Comment) { %>
+                                <p class="review-comment"><%= review.Comment %></p>
+                            <% } %>
+                        </div>
+                    <% }) %>
+                <% } else { %>
+                    <div class="empty-state small">
+                        <p>You haven't reviewed any products yet</p>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </div>
+</section>
+
+<%- include('partials/footer') %>

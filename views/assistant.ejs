@@ -1,0 +1,295 @@
+<%- include('partials/header') %>
+
+<section class="assistant-section">
+    <div class="container">
+        <div class="assistant-layout">
+            <!-- Chat Panel -->
+            <div class="assistant-chat">
+                <div class="chat-header">
+                    <div class="chat-avatar-ai">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div>
+                        <h2>Luminar AI Assistant</h2>
+                        <p class="chat-status"><span class="status-dot"></span> Online — ready to help</p>
+                    </div>
+                </div>
+
+                <div class="chat-messages" id="chatMessages">
+                    <div class="chat-message ai-message">
+                        <div class="message-avatar"><i class="fas fa-robot"></i></div>
+                        <div class="message-content">
+                            <p>Hello<%= user ? ', ' + user.Cust_name : '' %>! 💜 I'm your Luminar AI skincare assistant.</p>
+                            <p>I can help you with:</p>
+                            <ul>
+                                <li>🧴 Product recommendations for your <strong><%= user && user.C_Skin_type ? user.C_Skin_type : '' %></strong> skin</li>
+                                <li>📋 Personalized skincare routines</li>
+                                <li>🔬 Skin concern solutions (acne, dark spots, aging…)</li>
+                                <li>📸 Upload a photo for AI skin analysis</li>
+                            </ul>
+                            <p>What can I help you with today?</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chat-input-area">
+                    <div class="chat-suggestions">
+                        <button class="suggestion-chip" onclick="sendSuggestion('Recommend products for my skin type')">🧴 Recommend products</button>
+                        <button class="suggestion-chip" onclick="sendSuggestion('Give me a daily skincare routine')">📋 Skincare routine</button>
+                        <button class="suggestion-chip" onclick="sendSuggestion('How to deal with acne?')">💡 Acne solutions</button>
+                        <button class="suggestion-chip" onclick="sendSuggestion('How to reduce hyperpigmentation?')">✨ Dark spots help</button>
+                    </div>
+                    <form id="chatForm" onsubmit="sendMessage(event)">
+                        <div class="chat-input-wrapper">
+                            <input type="text" id="chatInput" placeholder="Ask me anything about skincare..." autocomplete="off">
+                            <button type="submit" class="chat-send-btn" id="sendBtn">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Skin Analysis Panel -->
+            <div class="analysis-panel">
+                <div class="analysis-card">
+                    <h3><i class="fas fa-camera"></i> AI Skin Analysis</h3>
+                    <p>Upload a face photo to detect skin conditions and get personalized product recommendations.</p>
+
+                    <div class="upload-area" id="uploadArea" onclick="document.getElementById('skinImageInput').click()">
+                        <div class="upload-content" id="uploadContent">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <p>Click or drag to upload</p>
+                            <small>JPEG, PNG, WebP (max 10MB)</small>
+                        </div>
+                        <img id="imagePreview" class="upload-preview hidden" alt="Preview">
+                    </div>
+                    <input type="file" id="skinImageInput" accept="image/jpeg,image/png,image/webp" hidden onchange="previewImage(this)">
+
+                    <button class="btn btn-primary btn-full" id="analyzeBtn" onclick="analyzeImage()" disabled>
+                        <i class="fas fa-search"></i> Analyze My Skin
+                    </button>
+                </div>
+
+                <!-- Analysis Results -->
+                <div class="analysis-results hidden" id="analysisResults">
+                    <div class="analysis-card">
+                        <h3><i class="fas fa-chart-bar"></i> Analysis Results</h3>
+                        <div class="health-score" id="healthScore"></div>
+                        <div class="detected-conditions" id="detectedConditions"></div>
+                        <div class="analysis-text" id="analysisText"></div>
+                    </div>
+                    <div class="analysis-card" id="recommendedProducts" style="display:none">
+                        <h3><i class="fas fa-magic"></i> Recommended Products</h3>
+                        <div class="analysis-products" id="analysisProductsList"></div>
+                    </div>
+                </div>
+
+                <!-- Skin Profile Card -->
+                <% if (user && user.C_Skin_type) { %>
+                    <div class="analysis-card skin-profile-card">
+                        <h3><i class="fas fa-user-circle"></i> Your Skin Profile</h3>
+                        <div class="profile-detail"><strong>Skin Type:</strong> <%= user.C_Skin_type %></div>
+                        <% if (user.Skin_concerns) { %>
+                            <div class="profile-detail"><strong>Concerns:</strong> <%= user.Skin_concerns %></div>
+                        <% } %>
+                        <a href="/quiz" class="btn btn-glass btn-sm"><i class="fas fa-redo"></i> Retake Quiz</a>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+// Chat functionality
+async function sendMessage(e) {
+    if (e) e.preventDefault();
+    const input = document.getElementById('chatInput');
+    const message = input.value.trim();
+    if (!message) return;
+
+    // Add user message
+    addMessage(message, 'user');
+    input.value = '';
+
+    // Show typing indicator
+    const typingId = showTyping();
+
+    try {
+        const res = await fetch('/assistant/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message })
+        });
+        const data = await res.json();
+        removeTyping(typingId);
+
+        if (data.error) {
+            addMessage(data.error, 'ai', true);
+        } else {
+            addMessage(data.reply, 'ai');
+        }
+    } catch (err) {
+        removeTyping(typingId);
+        addMessage('Sorry, something went wrong. Please try again.', 'ai', true);
+    }
+}
+
+function sendSuggestion(text) {
+    document.getElementById('chatInput').value = text;
+    sendMessage();
+}
+
+function addMessage(text, type, isError = false) {
+    const messages = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.className = `chat-message ${type}-message${isError ? ' error' : ''}`;
+
+    const formattedText = text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n/g, '<br>')
+        .replace(/• /g, '<br>• ')
+        .replace(/(\d+)\. /g, '<br>$1. ');
+
+    if (type === 'ai') {
+        div.innerHTML = `
+            <div class="message-avatar"><i class="fas fa-robot"></i></div>
+            <div class="message-content"><p>${formattedText}</p></div>
+        `;
+    } else {
+        div.innerHTML = `<div class="message-content"><p>${formattedText}</p></div>`;
+    }
+
+    messages.appendChild(div);
+    messages.scrollTop = messages.scrollHeight;
+}
+
+function showTyping() {
+    const messages = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.className = 'chat-message ai-message typing';
+    div.id = 'typing-' + Date.now();
+    div.innerHTML = `
+        <div class="message-avatar"><i class="fas fa-robot"></i></div>
+        <div class="message-content"><div class="typing-dots"><span></span><span></span><span></span></div></div>
+    `;
+    messages.appendChild(div);
+    messages.scrollTop = messages.scrollHeight;
+    return div.id;
+}
+
+function removeTyping(id) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+}
+
+// Image Analysis
+function previewImage(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const preview = document.getElementById('imagePreview');
+            preview.src = e.target.result;
+            preview.classList.remove('hidden');
+            document.getElementById('uploadContent').classList.add('hidden');
+            document.getElementById('analyzeBtn').disabled = false;
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+async function analyzeImage() {
+    const fileInput = document.getElementById('skinImageInput');
+    if (!fileInput.files[0]) return;
+
+    const btn = document.getElementById('analyzeBtn');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+    btn.disabled = true;
+
+    const formData = new FormData();
+    formData.append('skinImage', fileInput.files[0]);
+
+    try {
+        const res = await fetch('/assistant/analyze-image', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+
+        if (data.error) {
+            alert(data.error);
+        } else {
+            displayAnalysis(data);
+        }
+    } catch (err) {
+        alert('Analysis failed. Please try again.');
+    }
+
+    btn.innerHTML = '<i class="fas fa-search"></i> Analyze My Skin';
+    btn.disabled = false;
+}
+
+function displayAnalysis(data) {
+    const results = document.getElementById('analysisResults');
+    results.classList.remove('hidden');
+
+    // Health Score
+    const score = data.analysis.healthScore || 0;
+    document.getElementById('healthScore').innerHTML = `
+        <div class="score-circle">
+            <svg viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="54" stroke="#2a2a3e" stroke-width="8" fill="none"/>
+                <circle cx="60" cy="60" r="54" stroke="url(#scoreGrad)" stroke-width="8" fill="none"
+                    stroke-dasharray="${score * 3.39} 339" stroke-linecap="round" transform="rotate(-90 60 60)"/>
+                <defs><linearGradient id="scoreGrad"><stop offset="0%" stop-color="#c9a0dc"/><stop offset="100%" stop-color="#e8b4b8"/></linearGradient></defs>
+            </svg>
+            <div class="score-text">
+                <span class="score-number">${score}</span>
+                <span class="score-label">Health</span>
+            </div>
+        </div>
+    `;
+
+    // Conditions
+    const conditions = data.analysis.conditions || [];
+    document.getElementById('detectedConditions').innerHTML = conditions.length > 0
+        ? '<h4>Detected Conditions:</h4>' + conditions.map(c => `<span class="condition-tag">${c}</span>`).join('')
+        : '<p>No significant conditions detected ✨</p>';
+
+    // Analysis text
+    document.getElementById('analysisText').innerHTML = `<p>${data.analysis.analysis || ''}</p>`;
+
+    // Products
+    if (data.products && data.products.length > 0) {
+        document.getElementById('recommendedProducts').style.display = 'block';
+        document.getElementById('analysisProductsList').innerHTML = data.products.map(p => `
+            <a href="/products/${p.Product_id}" class="analysis-product-item">
+                <span class="ap-name">${p.Brand_name} ${p.Product_name}</span>
+                <span class="ap-price">₹${Number(p.Price).toLocaleString('en-IN')}</span>
+            </a>
+        `).join('');
+    }
+
+    results.scrollIntoView({ behavior: 'smooth' });
+}
+
+// Drag and drop
+const uploadArea = document.getElementById('uploadArea');
+uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+        const input = document.getElementById('skinImageInput');
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        input.files = dt.files;
+        previewImage(input);
+    }
+});
+</script>
+
+<%- include('partials/footer') %>

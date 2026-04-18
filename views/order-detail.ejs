@@ -1,0 +1,130 @@
+<%- include('partials/header') %>
+
+<section class="order-detail-section">
+    <div class="container">
+        <div class="breadcrumb">
+            <a href="/">Home</a> <i class="fas fa-chevron-right"></i>
+            <a href="/orders">My Orders</a> <i class="fas fa-chevron-right"></i>
+            <span>Order #<%= order.Order_id %></span>
+        </div>
+
+        <div class="order-detail-layout">
+            <div class="order-detail-main">
+                <!-- Order Status Timeline -->
+                <div class="order-card-full">
+                    <h2>
+                        <span>Order #<%= order.Order_id %></span>
+                        <span class="order-status status-<%= order.Order_status.toLowerCase().replace(/ /g, '-') %>"><%= order.Order_status %></span>
+                    </h2>
+
+                    <% if (!isCancelled) { %>
+                        <div class="order-timeline">
+                            <% timeline.forEach((step, i) => { %>
+                                <div class="timeline-step <%= step.completed ? 'completed' : '' %> <%= step.current ? 'current' : '' %>">
+                                    <div class="timeline-dot">
+                                        <i class="fas fa-<%= step.completed ? 'check' : 'circle' %>"></i>
+                                    </div>
+                                    <span class="timeline-label"><%= step.status %></span>
+                                </div>
+                            <% }) %>
+                        </div>
+                    <% } else { %>
+                        <div class="cancelled-notice">
+                            <i class="fas fa-times-circle"></i>
+                            <p>This order has been cancelled. Refund will be processed within 5-7 business days.</p>
+                        </div>
+                    <% } %>
+                </div>
+
+                <!-- Order Items -->
+                <div class="order-card-full">
+                    <h3><i class="fas fa-shopping-bag"></i> Items Ordered</h3>
+                    <div class="order-items-list">
+                        <% items.forEach(item => { %>
+                            <div class="order-item-row">
+                                <div class="order-item-image">
+                                    <div class="product-placeholder-img small"><i class="fas fa-pump-soap"></i></div>
+                                </div>
+                                <div class="order-item-info">
+                                    <a href="/products/<%= item.Product_id %>" class="order-item-name"><%= item.Product_name %></a>
+                                    <span class="order-item-brand"><%= item.Brand_name %></span>
+                                    <span class="product-badge skin-<%= item.P_Skin_type.toLowerCase() %> small"><%= item.P_Skin_type %></span>
+                                </div>
+                                <div class="order-item-qty">Qty: <%= item.Quantity %></div>
+                                <div class="order-item-price">₹<%= (item.Unit_price * item.Quantity).toLocaleString('en-IN') %></div>
+                            </div>
+                        <% }) %>
+                    </div>
+                </div>
+            </div>
+
+            <div class="order-detail-sidebar">
+                <!-- Payment Info -->
+                <div class="order-card-full">
+                    <h3><i class="fas fa-credit-card"></i> Payment Details</h3>
+                    <% if (payment) { %>
+                        <div class="payment-info-grid">
+                            <div class="payment-info-row">
+                                <span>Transaction ID</span>
+                                <span class="mono"><%= payment.Transaction_id %></span>
+                            </div>
+                            <div class="payment-info-row">
+                                <span>Method</span>
+                                <span><%= payment.Pay_method %></span>
+                            </div>
+                            <div class="payment-info-row">
+                                <span>Status</span>
+                                <span class="pay-status-<%= payment.Pay_status.toLowerCase() %>">
+                                    <i class="fas fa-<%= payment.Pay_status === 'Completed' ? 'check-circle' : payment.Pay_status === 'Refunded' ? 'undo' : 'clock' %>"></i>
+                                    <%= payment.Pay_status %>
+                                </span>
+                            </div>
+                            <div class="payment-info-row">
+                                <span>Date</span>
+                                <span><%= new Date(payment.Payment_date).toLocaleDateString('en-IN') %></span>
+                            </div>
+                            <div class="payment-info-row">
+                                <span>Amount</span>
+                                <span class="payment-amount">₹<%= payment.amount.toLocaleString('en-IN') %></span>
+                            </div>
+                        </div>
+                    <% } %>
+                </div>
+
+                <!-- Shipping Info -->
+                <div class="order-card-full">
+                    <h3><i class="fas fa-truck"></i> Shipping Details</h3>
+                    <div class="payment-info-grid">
+                        <div class="payment-info-row">
+                            <span>Tracking #</span>
+                            <span class="mono"><%= order.Tracking_number %></span>
+                        </div>
+                        <% if (order.Shipping_address) { %>
+                            <div class="payment-info-row">
+                                <span>Address</span>
+                                <span><%= order.Shipping_address %></span>
+                            </div>
+                        <% } %>
+                        <div class="payment-info-row">
+                            <span>Order Date</span>
+                            <span><%= new Date(order.Order_date).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' }) %></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <% if (!isCancelled && (order.Order_status === 'Processing' || order.Order_status === 'Confirmed')) { %>
+                    <form action="/orders/<%= order.Order_id %>/cancel" method="POST" onsubmit="return confirm('Are you sure you want to cancel this order?')">
+                        <button type="submit" class="btn btn-danger btn-full">
+                            <i class="fas fa-times"></i> Cancel Order
+                        </button>
+                    </form>
+                <% } %>
+
+                <a href="/orders" class="btn btn-glass btn-full"><i class="fas fa-arrow-left"></i> Back to Orders</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<%- include('partials/footer') %>

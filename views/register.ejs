@@ -1,0 +1,80 @@
+<%- include('partials/header') %>
+
+<section class="auth-section">
+    <div class="auth-container">
+        <div class="auth-visual">
+            <div class="auth-visual-content">
+                <div class="auth-glow"></div>
+                <h2>Join Luminar</h2>
+                <p>Start your personalized skincare journey today.</p>
+                <div class="auth-features">
+                    <div class="auth-feature"><i class="fas fa-check-circle"></i> Discover Your Exact Skin Type</div>
+                    <div class="auth-feature"><i class="fas fa-check-circle"></i> AI Face Analysis</div>
+                    <div class="auth-feature"><i class="fas fa-check-circle"></i> Personalized Product Matches</div>
+                    <div class="auth-feature"><i class="fas fa-check-circle"></i> Expert Skincare Advice</div>
+                </div>
+            </div>
+        </div>
+        <div class="auth-form-side">
+            <div class="auth-form-container">
+                <div class="auth-header">
+                    <a href="/" class="auth-logo"><span class="logo-icon">✦</span> LUMINAR</a>
+                    <h1>Create Account</h1>
+                    <p>Fill in your details to get started</p>
+                </div>
+
+                <form action="/auth/register" method="POST" class="auth-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="name"><i class="fas fa-user"></i> Full Name *</label>
+                            <input type="text" id="name" name="name" placeholder="Your full name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="phone"><i class="fas fa-phone"></i> Phone</label>
+                            <input type="tel" id="phone" name="phone" placeholder="+91 XXXXX XXXXX">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="email"><i class="fas fa-envelope"></i> Email Address *</label>
+                        <input type="email" id="email" name="email" placeholder="you@example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="city"><i class="fas fa-map-marker-alt"></i> City</label>
+                        <input type="text" id="city" name="city" placeholder="Your city">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="password"><i class="fas fa-lock"></i> Password *</label>
+                            <div class="password-input">
+                                <input type="password" id="password" name="password" placeholder="Min 6 characters" required minlength="6">
+                                <button type="button" class="password-toggle" onclick="togglePassword('password')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="confirmPassword"><i class="fas fa-lock"></i> Confirm *</label>
+                            <div class="password-input">
+                                <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Repeat password" required>
+                                <button type="button" class="password-toggle" onclick="togglePassword('confirmPassword')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full">
+                        <i class="fas fa-user-plus"></i> Create Account
+                    </button>
+                </form>
+
+                <div class="auth-divider"><span>or</span></div>
+
+                <p class="auth-switch">
+                    Already have an account? <a href="/auth/login">Sign in here</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<%- include('partials/footer') %>
