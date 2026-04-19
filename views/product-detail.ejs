@@ -11,10 +11,18 @@
 
         <div class="product-detail">
             <div class="product-detail-image">
-                <div class="product-detail-placeholder">
-                    <i class="fas fa-pump-soap"></i>
-                    <span><%= product.Category %></span>
-                </div>
+                <% if (product.Image_url && product.Image_url.startsWith('http')) { %>
+                    <img src="<%= product.Image_url %>" alt="<%= product.Product_name %>" class="product-detail-img" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                    <div class="product-detail-placeholder" style="display:none">
+                        <i class="fas fa-pump-soap"></i>
+                        <span><%= product.Category %></span>
+                    </div>
+                <% } else { %>
+                    <div class="product-detail-placeholder">
+                        <i class="fas fa-pump-soap"></i>
+                        <span><%= product.Category %></span>
+                    </div>
+                <% } %>
                 <span class="product-badge skin-<%= product.P_Skin_type.toLowerCase() %>"><%= product.P_Skin_type %> Skin</span>
             </div>
 
@@ -41,14 +49,14 @@
                 <p class="product-detail-desc"><%= product.Description %></p>
 
                 <% if (product.Ingredients) { %>
-                    <div class="product-detail-section">
+                    <div class="product-detail-info-section">
                         <h3><i class="fas fa-flask"></i> Key Ingredients</h3>
                         <p><%= product.Ingredients %></p>
                     </div>
                 <% } %>
 
                 <% if (product.How_to_use) { %>
-                    <div class="product-detail-section">
+                    <div class="product-detail-info-section">
                         <h3><i class="fas fa-hand-holding-water"></i> How to Use</h3>
                         <p><%= product.How_to_use %></p>
                     </div>
@@ -63,19 +71,23 @@
                 </div>
 
                 <% if (user) { %>
-                    <form action="/cart/add" method="POST" class="add-to-cart-form">
-                        <input type="hidden" name="productId" value="<%= product.Product_id %>">
-                        <div class="quantity-selector">
-                            <button type="button" class="qty-btn" onclick="changeQty(-1)">-</button>
-                            <input type="number" name="quantity" value="1" min="1" max="10" id="qtyInput">
-                            <button type="button" class="qty-btn" onclick="changeQty(1)">+</button>
-                        </div>
-                        <button type="submit" class="btn btn-primary btn-lg add-to-cart-btn">
-                            <i class="fas fa-shopping-bag"></i> Add to Cart
-                        </button>
-                    </form>
+                    <div class="add-to-cart-section">
+                        <form action="/cart/add" method="POST" class="add-to-cart-form">
+                            <input type="hidden" name="productId" value="<%= product.Product_id %>">
+                            <div class="quantity-selector">
+                                <button type="button" class="qty-btn" onclick="changeQty(-1)">-</button>
+                                <input type="number" name="quantity" value="1" min="1" max="10" id="qtyInput">
+                                <button type="button" class="qty-btn" onclick="changeQty(1)">+</button>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-lg add-to-cart-btn">
+                                <i class="fas fa-shopping-bag"></i> Add to Cart
+                            </button>
+                        </form>
+                    </div>
                 <% } else { %>
-                    <a href="/auth/login" class="btn btn-primary btn-lg"><i class="fas fa-sign-in-alt"></i> Login to Purchase</a>
+                    <div class="add-to-cart-section">
+                        <a href="/auth/login" class="btn btn-primary btn-lg"><i class="fas fa-sign-in-alt"></i> Login to Purchase</a>
+                    </div>
                 <% } %>
             </div>
         </div>
@@ -171,7 +183,12 @@
                     <% related.forEach(prod => { %>
                         <a href="/products/<%= prod.Product_id %>" class="product-card">
                             <div class="product-image">
-                                <div class="product-placeholder-img"><i class="fas fa-pump-soap"></i></div>
+                                <% if (prod.Image_url && prod.Image_url.startsWith('http')) { %>
+                                    <img src="<%= prod.Image_url %>" alt="<%= prod.Product_name %>" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                                    <div class="product-placeholder-img" style="display:none"><i class="fas fa-pump-soap"></i></div>
+                                <% } else { %>
+                                    <div class="product-placeholder-img"><i class="fas fa-pump-soap"></i></div>
+                                <% } %>
                                 <span class="product-badge skin-<%= prod.P_Skin_type.toLowerCase() %>"><%= prod.P_Skin_type %></span>
                             </div>
                             <div class="product-info">

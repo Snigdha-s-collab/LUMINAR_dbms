@@ -443,7 +443,8 @@ input, textarea, select, button { font-family: var(--font-body); }
 .breadcrumb a:hover { color: var(--accent-primary); }
 .breadcrumb i { font-size: 0.6rem; }
 .product-detail { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-bottom: 60px; }
-.product-detail-image { position: relative; background: linear-gradient(135deg, #1e1e32, #252540); border-radius: var(--radius-lg); aspect-ratio: 1; display: flex; align-items: center; justify-content: center; }
+.product-detail-image { position: relative; background: linear-gradient(135deg, #1e1e32, #252540); border-radius: var(--radius-lg); aspect-ratio: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.product-detail-image img.product-detail-img { width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-lg); }
 .product-detail-placeholder { text-align: center; color: var(--text-muted); opacity: 0.3; }
 .product-detail-placeholder i { font-size: 5rem; display: block; margin-bottom: 12px; }
 .product-detail-info { padding: 12px 0; }
@@ -455,15 +456,19 @@ input, textarea, select, button { font-family: var(--font-body); }
 .product-detail-rating span { color: var(--text-muted); font-size: 0.88rem; }
 .product-detail-price { font-family: var(--font-ui); font-size: 2rem; font-weight: 700; color: var(--accent-secondary); margin-bottom: 20px; }
 .product-detail-desc { color: var(--text-secondary); font-size: 0.95rem; line-height: 1.7; margin-bottom: 24px; }
-.product-detail-section { margin-bottom: 20px; }
-.product-detail-section h3 { font-family: var(--font-ui); font-size: 0.95rem; margin-bottom: 8px; color: var(--accent-primary); }
-.product-detail-section h3 i { margin-right: 6px; }
-.product-detail-section p { font-size: 0.88rem; color: var(--text-secondary); line-height: 1.6; }
+.product-detail-info-section { margin-bottom: 20px; }
+.product-detail-info-section h3 { font-family: var(--font-ui); font-size: 0.95rem; margin-bottom: 8px; color: var(--accent-primary); }
+.product-detail-info-section h3 i { margin-right: 6px; }
+.product-detail-info-section p { font-size: 0.88rem; color: var(--text-secondary); line-height: 1.6; }
 .product-detail-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
 .tag { padding: 5px 14px; border-radius: var(--radius-xl); background: var(--bg-card); border: 1px solid var(--border-color); font-size: 0.78rem; color: var(--text-secondary); }
 .tag i { margin-right: 4px; }
 .tag-match { background: rgba(74,222,128,0.1); border-color: rgba(74,222,128,0.3); color: var(--success); }
+
+/* Add to Cart — FIXED: separated into its own section with proper z-index */
+.add-to-cart-section { position: relative; z-index: 10; margin-top: 24px; padding: 20px 0; clear: both; }
 .add-to-cart-form { display: flex; gap: 16px; align-items: center; }
+.add-to-cart-btn { padding: 14px 32px; font-size: 1rem; white-space: nowrap; }
 .quantity-selector { display: flex; align-items: center; gap: 0; border: 1px solid var(--border-color); border-radius: var(--radius-sm); overflow: hidden; }
 .qty-btn { width: 40px; height: 44px; background: var(--bg-card); border: none; color: var(--text-primary); cursor: pointer; font-size: 1.1rem; transition: var(--transition); }
 .qty-btn:hover { background: rgba(201,160,220,0.15); }
@@ -807,3 +812,135 @@ input, textarea, select, button { font-family: var(--font-body); }
 
 /* Main content spacing */
 .main-content { min-height: calc(100vh - 200px); }
+
+/* ============================================
+   Product Card Images
+   ============================================ */
+.product-image img {
+    width: 100%; height: 100%; object-fit: cover;
+    transition: transform 0.4s ease;
+}
+.product-card:hover .product-image img { transform: scale(1.05); }
+.product-image { overflow: hidden; }
+
+/* ============================================
+   Routine Generator
+   ============================================ */
+.routine-generator-card .routine-form { margin-bottom: 16px; }
+.routine-generator-card .form-group { margin-bottom: 12px; }
+.routine-generator-card .form-group label {
+    display: block; font-size: 0.8rem; font-weight: 600;
+    color: var(--text-secondary); margin-bottom: 6px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+.routine-generator-card .filter-select {
+    width: 100%; padding: 10px 12px; background: var(--bg-secondary);
+    border: 1px solid var(--border-color); border-radius: var(--radius-sm);
+    color: var(--text-primary); font-size: 0.85rem;
+}
+
+.routine-results { margin-top: 16px; }
+.routine-header { text-align: center; margin-bottom: 16px; }
+.routine-header h4 {
+    font-family: var(--font-display); font-size: 1.1rem;
+    background: var(--gradient-primary); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.routine-section { margin-bottom: 16px; }
+.routine-section h5 { font-size: 0.9rem; margin-bottom: 10px; color: var(--accent-primary); }
+.routine-step {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 10px; margin-bottom: 8px;
+    background: var(--bg-secondary); border-radius: var(--radius-sm);
+    border-left: 3px solid var(--accent-primary);
+    animation: fadeInUp 0.3s ease;
+}
+.step-num {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--gradient-primary); color: var(--bg-primary);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; font-weight: 700; flex-shrink: 0;
+}
+.step-details { flex: 1; }
+.step-details strong { display: block; font-size: 0.82rem; color: var(--text-primary); margin-bottom: 2px; }
+.step-product { display: block; font-size: 0.78rem; color: var(--accent-secondary); margin-bottom: 4px; }
+.step-details small { display: block; font-size: 0.72rem; color: var(--text-muted); line-height: 1.4; }
+.wait-time { color: var(--accent-primary) !important; font-weight: 500; }
+
+.routine-avoid, .routine-tips { background: var(--bg-secondary); border-radius: var(--radius-sm); padding: 12px 16px; }
+.routine-avoid ul, .routine-tips ul { padding-left: 18px; margin: 0; }
+.routine-avoid li, .routine-tips li { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 4px; }
+.routine-avoid { border-left: 3px solid var(--error); }
+.routine-tips { border-left: 3px solid var(--success); }
+
+.routine-total {
+    text-align: center; padding: 12px;
+    background: rgba(201,160,220,0.08); border-radius: var(--radius-sm);
+    font-size: 0.9rem; color: var(--text-secondary); margin-top: 12px;
+}
+.routine-total strong { color: var(--accent-secondary); font-size: 1.1rem; }
+
+/* ============================================
+   Did You Know / Tips
+   ============================================ */
+.did-you-know-card { }
+.dyk-category-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.dyk-tab {
+    padding: 6px 14px; border-radius: var(--radius-xl);
+    background: var(--bg-secondary); border: 1px solid var(--border-color);
+    color: var(--text-secondary); font-size: 0.78rem; cursor: pointer;
+    transition: var(--transition); font-family: var(--font-ui);
+}
+.dyk-tab:hover { border-color: var(--accent-primary); color: var(--text-primary); }
+.dyk-tab.active {
+    background: rgba(201,160,220,0.15); border-color: var(--accent-primary);
+    color: var(--accent-primary); font-weight: 600;
+}
+
+.tips-container {
+    max-height: 400px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 10px;
+}
+.tips-loading { text-align: center; padding: 24px; color: var(--text-muted); }
+
+.tip-card {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 14px; background: var(--bg-secondary);
+    border-radius: var(--radius-md); border: 1px solid var(--border-color);
+    transition: var(--transition);
+    animation: fadeInUp 0.3s ease;
+}
+.tip-card:hover { border-color: var(--accent-primary); transform: translateX(4px); }
+.tip-icon { font-size: 1.5rem; flex-shrink: 0; line-height: 1; }
+.tip-card p { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; margin: 0; }
+
+/* ============================================
+   Cart Item Images
+   ============================================ */
+.cart-item-image img {
+    width: 70px; height: 70px; object-fit: cover;
+    border-radius: var(--radius-sm);
+}
+
+/* ============================================
+   Review Delete Form Fix
+   ============================================ */
+.review-delete { margin-top: 8px; }
+
+/* ============================================
+   Filter option max-height scroll
+   ============================================ */
+.filter-group .filter-options {
+    max-height: 220px; overflow-y: auto;
+}
+
+/* ============================================
+   Responsive additions for new features
+   ============================================ */
+@media (max-width: 768px) {
+    .add-to-cart-form { flex-direction: column; align-items: stretch; }
+    .add-to-cart-btn { width: 100%; }
+    .routine-step { flex-direction: column; gap: 8px; }
+    .step-num { align-self: flex-start; }
+    .dyk-category-tabs { gap: 4px; }
+    .dyk-tab { padding: 5px 10px; font-size: 0.72rem; }
+}

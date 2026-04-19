@@ -82,6 +82,31 @@
                         </select>
                     </div>
 
+                    <!-- Price Range -->
+                    <div class="filter-group">
+                        <label>Price Range</label>
+                        <div class="filter-options">
+                            <label class="filter-option">
+                                <input type="radio" name="price_range" value="" <%= !filters.price_range ? 'checked' : '' %>> All Prices
+                            </label>
+                            <label class="filter-option">
+                                <input type="radio" name="price_range" value="0-299" <%= filters.price_range === '0-299' ? 'checked' : '' %>> Under ₹300
+                            </label>
+                            <label class="filter-option">
+                                <input type="radio" name="price_range" value="300-599" <%= filters.price_range === '300-599' ? 'checked' : '' %>> ₹300 — ₹599
+                            </label>
+                            <label class="filter-option">
+                                <input type="radio" name="price_range" value="600-999" <%= filters.price_range === '600-999' ? 'checked' : '' %>> ₹600 — ₹999
+                            </label>
+                            <label class="filter-option">
+                                <input type="radio" name="price_range" value="1000-1999" <%= filters.price_range === '1000-1999' ? 'checked' : '' %>> ₹1,000 — ₹1,999
+                            </label>
+                            <label class="filter-option">
+                                <input type="radio" name="price_range" value="2000-99999" <%= filters.price_range === '2000-99999' ? 'checked' : '' %>> ₹2,000+
+                            </label>
+                        </div>
+                    </div>
+
                     <!-- Sort -->
                     <div class="filter-group">
                         <label>Sort By</label>
@@ -115,9 +140,16 @@
                         <% products.forEach(product => { %>
                             <a href="/products/<%= product.Product_id %>" class="product-card">
                                 <div class="product-image">
-                                    <div class="product-placeholder-img">
-                                        <i class="fas fa-pump-soap"></i>
-                                    </div>
+                                    <% if (product.Image_url && product.Image_url.startsWith('http')) { %>
+                                        <img src="<%= product.Image_url %>" alt="<%= product.Product_name %>" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                                        <div class="product-placeholder-img" style="display:none">
+                                            <i class="fas fa-pump-soap"></i>
+                                        </div>
+                                    <% } else { %>
+                                        <div class="product-placeholder-img">
+                                            <i class="fas fa-pump-soap"></i>
+                                        </div>
+                                    <% } %>
                                     <span class="product-badge skin-<%= product.P_Skin_type.toLowerCase() %>"><%= product.P_Skin_type %></span>
                                     <% if (user && user.C_Skin_type && (product.P_Skin_type === user.C_Skin_type || product.P_Skin_type === 'All')) { %>
                                         <span class="product-match-badge"><i class="fas fa-check-circle"></i> Matches You</span>

@@ -6,7 +6,7 @@ const { isAuthenticated } = require('../middleware/auth');
 // GET All Products (with filters)
 router.get('/', async (req, res) => {
     try {
-        const { category, skin_type, brand, search, sort, recommended } = req.query;
+        const { category, skin_type, brand, search, sort, recommended, price_range } = req.query;
         let query = `
             SELECT p.*, b.Brand_name,
             COALESCE(AVG(r.Rating), 0) as avg_rating,
@@ -40,6 +40,16 @@ router.get('/', async (req, res) => {
             conditions.push('(p.Product_name LIKE ? OR p.Description LIKE ? OR b.Brand_name LIKE ?)');
             params.push(`%${search}%`, `%${search}%`, `%${search}%`);
         }
+        // Price range filter
+        if (price_range) {
+            const parts = price_range.split('-');
+            if (parts.length === 2) {
+                const minPrice = parseFloat(parts[0]);
+                const maxPrice = parseFloat(parts[1]);
+                conditions.push('p.Price >= ? AND p.Price <= ?');
+                params.push(minPrice, maxPrice);
+            }
+        }
 
         if (conditions.length > 0) {
             query += ' WHERE ' + conditions.join(' AND ');
@@ -63,7 +73,7 @@ router.get('/', async (req, res) => {
 
         res.render('products', {
             products, categories, brands, skinTypes,
-            filters: { category, skin_type, brand, search, sort, recommended }
+            filters: { category, skin_type, brand, search, sort, recommended, price_range }
         });
     } catch (err) {
         console.error('Products error:', err);

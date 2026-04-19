@@ -19,29 +19,31 @@
                     <div class="chat-message ai-message">
                         <div class="message-avatar"><i class="fas fa-robot"></i></div>
                         <div class="message-content">
-                            <p>Hello<%= user ? ', ' + user.Cust_name : '' %>! 💜 I'm your Luminar AI skincare assistant.</p>
-                            <p>I can help you with:</p>
+                            <p>Hello<%= user ? ', ' + user.Cust_name : '' %>! 💜 I'm your Luminar AI skincare expert.</p>
+                            <p>I provide <strong>detailed, personalized skincare advice</strong> — not just product lists! Ask me anything about:</p>
                             <ul>
                                 <li>🧴 Product recommendations for your <strong><%= user && user.C_Skin_type ? user.C_Skin_type : '' %></strong> skin</li>
-                                <li>📋 Personalized skincare routines</li>
-                                <li>🔬 Skin concern solutions (acne, dark spots, aging…)</li>
+                                <li>📋 Complete step-by-step skincare routines</li>
+                                <li>🔬 Skin concern solutions with ingredient science</li>
+                                <li>💡 Why products work (or don't) for specific conditions</li>
                                 <li>📸 Upload a photo for AI skin analysis</li>
                             </ul>
-                            <p>What can I help you with today?</p>
+                            <p>Try asking something specific like <em>"I have hyperpigmentation that's getting worse, what should I do?"</em></p>
                         </div>
                     </div>
                 </div>
 
                 <div class="chat-input-area">
                     <div class="chat-suggestions">
-                        <button class="suggestion-chip" onclick="sendSuggestion('Recommend products for my skin type')">🧴 Recommend products</button>
-                        <button class="suggestion-chip" onclick="sendSuggestion('Give me a daily skincare routine')">📋 Skincare routine</button>
-                        <button class="suggestion-chip" onclick="sendSuggestion('How to deal with acne?')">💡 Acne solutions</button>
-                        <button class="suggestion-chip" onclick="sendSuggestion('How to reduce hyperpigmentation?')">✨ Dark spots help</button>
+                        <button class="suggestion-chip" onclick="sendSuggestion('I have hyperpigmentation and dark spots. What ingredients and products should I use?')">✨ Dark spots help</button>
+                        <button class="suggestion-chip" onclick="sendSuggestion('Create a complete morning and night skincare routine for my skin type')">📋 Full routine</button>
+                        <button class="suggestion-chip" onclick="sendSuggestion('My acne is not going away. What am I doing wrong?')">💡 Acne guidance</button>
+                        <button class="suggestion-chip" onclick="sendSuggestion('What are the best anti-aging ingredients and when should I start using them?')">🧬 Anti-aging</button>
+                        <button class="suggestion-chip" onclick="sendSuggestion('Recommend budget-friendly products under ₹500 for my skin')">💰 Budget picks</button>
                     </div>
                     <form id="chatForm" onsubmit="sendMessage(event)">
                         <div class="chat-input-wrapper">
-                            <input type="text" id="chatInput" placeholder="Ask me anything about skincare..." autocomplete="off">
+                            <input type="text" id="chatInput" placeholder="Ask me anything about skincare — I'll give detailed advice..." autocomplete="off">
                             <button type="submit" class="chat-send-btn" id="sendBtn">
                                 <i class="fas fa-paper-plane"></i>
                             </button>
@@ -50,8 +52,48 @@
                 </div>
             </div>
 
-            <!-- Skin Analysis Panel -->
+            <!-- Right Panel -->
             <div class="analysis-panel">
+                <!-- Routine Generator -->
+                <div class="analysis-card routine-generator-card">
+                    <h3><i class="fas fa-calendar-alt"></i> Routine Generator</h3>
+                    <p>Generate a personalized AM/PM skincare routine based on your skin type and concerns.</p>
+                    <div class="routine-form">
+                        <div class="form-group">
+                            <label>Skin Type</label>
+                            <select id="routineSkinType" class="filter-select">
+                                <% const skinTypes = ['Oily', 'Dry', 'Combination', 'Sensitive', 'Normal']; %>
+                                <% skinTypes.forEach(st => { %>
+                                    <option value="<%= st %>" <%= (user && user.C_Skin_type === st) ? 'selected' : '' %>><%= st %></option>
+                                <% }) %>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Main Concerns</label>
+                            <input type="text" id="routineConcerns" class="filter-select" placeholder="e.g., acne, dark spots, aging" value="<%= user && user.Skin_concerns ? user.Skin_concerns : '' %>">
+                        </div>
+                        <button class="btn btn-primary btn-full" id="generateRoutineBtn" onclick="generateRoutine()">
+                            <i class="fas fa-magic"></i> Generate My Routine
+                        </button>
+                    </div>
+                    <div id="routineResults" class="routine-results hidden"></div>
+                </div>
+
+                <!-- Did You Know Section -->
+                <div class="analysis-card did-you-know-card">
+                    <h3><i class="fas fa-lightbulb"></i> Did You Know?</h3>
+                    <div class="dyk-category-tabs">
+                        <button class="dyk-tab active" onclick="loadTips('general', this)">General</button>
+                        <button class="dyk-tab" onclick="loadTips('acne', this)">Acne</button>
+                        <button class="dyk-tab" onclick="loadTips('darkCircles', this)">Dark Circles</button>
+                        <button class="dyk-tab" onclick="loadTips('skincare', this)">Ingredients</button>
+                    </div>
+                    <div id="tipsContainer" class="tips-container">
+                        <div class="tips-loading"><i class="fas fa-spinner fa-spin"></i> Loading tips...</div>
+                    </div>
+                </div>
+
+                <!-- Skin Analysis -->
                 <div class="analysis-card">
                     <h3><i class="fas fa-camera"></i> AI Skin Analysis</h3>
                     <p>Upload a face photo to detect skin conditions and get personalized product recommendations.</p>
@@ -109,11 +151,9 @@ async function sendMessage(e) {
     const message = input.value.trim();
     if (!message) return;
 
-    // Add user message
     addMessage(message, 'user');
     input.value = '';
 
-    // Show typing indicator
     const typingId = showTyping();
 
     try {
@@ -148,9 +188,13 @@ function addMessage(text, type, isError = false) {
 
     const formattedText = text
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/_(.*?)_/g, '<em>$1</em>')
         .replace(/\n/g, '<br>')
         .replace(/• /g, '<br>• ')
-        .replace(/(\d+)\. /g, '<br>$1. ');
+        .replace(/(\d+)\. /g, '<br>$1. ')
+        .replace(/✅/g, '<span style="color:#4ecdc4">✅</span>')
+        .replace(/❌/g, '<span style="color:#e74c3c">❌</span>')
+        .replace(/⚠️/g, '<span style="color:#f39c12">⚠️</span>');
 
     if (type === 'ai') {
         div.innerHTML = `
@@ -183,6 +227,137 @@ function removeTyping(id) {
     const el = document.getElementById(id);
     if (el) el.remove();
 }
+
+// Routine Generator
+async function generateRoutine() {
+    const btn = document.getElementById('generateRoutineBtn');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    btn.disabled = true;
+
+    const skinType = document.getElementById('routineSkinType').value;
+    const concerns = document.getElementById('routineConcerns').value;
+
+    try {
+        const res = await fetch('/assistant/routine', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ skin_type: skinType, concerns })
+        });
+        const data = await res.json();
+
+        if (data.error) {
+            alert(data.error);
+        } else {
+            displayRoutine(data.routine);
+        }
+    } catch (err) {
+        alert('Failed to generate routine. Please try again.');
+    }
+
+    btn.innerHTML = '<i class="fas fa-magic"></i> Generate My Routine';
+    btn.disabled = false;
+}
+
+function displayRoutine(routine) {
+    const container = document.getElementById('routineResults');
+    container.classList.remove('hidden');
+
+    let html = `<div class="routine-header"><h4>Your ${routine.skin_type} Skin Routine</h4></div>`;
+
+    // Morning routine
+    html += `<div class="routine-section"><h5>☀️ Morning Routine</h5>`;
+    if (routine.morning && routine.morning.length > 0) {
+        routine.morning.forEach(step => {
+            html += `<div class="routine-step">
+                <div class="step-num">${step.step}</div>
+                <div class="step-details">
+                    <strong>${step.category}</strong>
+                    <span class="step-product">${step.brand} ${step.product} — ₹${step.price}</span>
+                    <small>${step.how} | Amount: ${step.amount}</small>
+                    ${step.wait_time ? `<small class="wait-time">⏱️ Wait: ${step.wait_time}</small>` : ''}
+                </div>
+            </div>`;
+        });
+    }
+    html += `</div>`;
+
+    // Evening routine
+    html += `<div class="routine-section"><h5>🌙 Evening Routine</h5>`;
+    if (routine.evening && routine.evening.length > 0) {
+        routine.evening.forEach(step => {
+            html += `<div class="routine-step">
+                <div class="step-num">${step.step}</div>
+                <div class="step-details">
+                    <strong>${step.category}</strong>
+                    <span class="step-product">${step.brand} ${step.product} — ₹${step.price}</span>
+                    <small>${step.how} | Amount: ${step.amount}</small>
+                </div>
+            </div>`;
+        });
+    }
+    html += `</div>`;
+
+    // Weekly treatments
+    if (routine.weekly && routine.weekly.length > 0) {
+        html += `<div class="routine-section"><h5>📅 Weekly Treatments</h5>`;
+        routine.weekly.forEach(w => {
+            html += `<div class="routine-step"><div class="step-details"><strong>${w.treatment}</strong><small>${w.frequency}</small></div></div>`;
+        });
+        html += `</div>`;
+    }
+
+    // Things to avoid
+    if (routine.avoid && routine.avoid.length > 0) {
+        html += `<div class="routine-section routine-avoid"><h5>🚫 Things to Avoid</h5><ul>`;
+        routine.avoid.forEach(a => { html += `<li>${a}</li>`; });
+        html += `</ul></div>`;
+    }
+
+    // Tips
+    if (routine.tips && routine.tips.length > 0) {
+        html += `<div class="routine-section routine-tips"><h5>💡 Pro Tips</h5><ul>`;
+        routine.tips.forEach(t => { html += `<li>${t}</li>`; });
+        html += `</ul></div>`;
+    }
+
+    // Total cost
+    if (routine.total_cost) {
+        html += `<div class="routine-total">Estimated Total: <strong>₹${routine.total_cost.toLocaleString('en-IN')}</strong></div>`;
+    }
+
+    container.innerHTML = html;
+    container.scrollIntoView({ behavior: 'smooth' });
+}
+
+// Did You Know Tips
+async function loadTips(category, btn) {
+    document.querySelectorAll('.dyk-tab').forEach(t => t.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    const container = document.getElementById('tipsContainer');
+    container.innerHTML = '<div class="tips-loading"><i class="fas fa-spinner fa-spin"></i> Loading tips...</div>';
+
+    try {
+        const res = await fetch(`/assistant/tips?category=${category}`);
+        const data = await res.json();
+
+        if (data.tips && data.tips.length > 0) {
+            container.innerHTML = data.tips.map(tip => `
+                <div class="tip-card">
+                    <span class="tip-icon">${tip.icon}</span>
+                    <p>${tip.fact}</p>
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = '<p>No tips available.</p>';
+        }
+    } catch (err) {
+        container.innerHTML = '<p>Failed to load tips. Please try again.</p>';
+    }
+}
+
+// Load initial tips
+document.addEventListener('DOMContentLoaded', () => loadTips('general'));
 
 // Image Analysis
 function previewImage(input) {
@@ -234,7 +409,6 @@ function displayAnalysis(data) {
     const results = document.getElementById('analysisResults');
     results.classList.remove('hidden');
 
-    // Health Score
     const score = data.analysis.healthScore || 0;
     document.getElementById('healthScore').innerHTML = `
         <div class="score-circle">
@@ -251,16 +425,13 @@ function displayAnalysis(data) {
         </div>
     `;
 
-    // Conditions
     const conditions = data.analysis.conditions || [];
     document.getElementById('detectedConditions').innerHTML = conditions.length > 0
         ? '<h4>Detected Conditions:</h4>' + conditions.map(c => `<span class="condition-tag">${c}</span>`).join('')
         : '<p>No significant conditions detected ✨</p>';
 
-    // Analysis text
     document.getElementById('analysisText').innerHTML = `<p>${data.analysis.analysis || ''}</p>`;
 
-    // Products
     if (data.products && data.products.length > 0) {
         document.getElementById('recommendedProducts').style.display = 'block';
         document.getElementById('analysisProductsList').innerHTML = data.products.map(p => `

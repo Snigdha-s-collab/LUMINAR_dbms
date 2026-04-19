@@ -25,11 +25,11 @@
         </div>
         <div class="hero-stats">
             <div class="hero-stat">
-                <span class="stat-number">50+</span>
+                <span class="stat-number">120+</span>
                 <span class="stat-label">Products</span>
             </div>
             <div class="hero-stat">
-                <span class="stat-number">12</span>
+                <span class="stat-number">15</span>
                 <span class="stat-label">Brands</span>
             </div>
             <div class="hero-stat">
@@ -63,13 +63,13 @@
                 <div class="step-number">02</div>
                 <div class="step-icon"><i class="fas fa-robot"></i></div>
                 <h3>AI Analysis</h3>
-                <p>Upload a photo for AI skin analysis or chat with our skincare assistant for personalized advice and product recommendations.</p>
+                <p>Chat with our AI expert for detailed skincare advice, generate personalized routines, or upload a photo for skin analysis.</p>
             </div>
             <div class="step-card" data-aos="fade-up" data-delay="400">
                 <div class="step-number">03</div>
                 <div class="step-icon"><i class="fas fa-shopping-bag"></i></div>
                 <h3>Shop & Glow</h3>
-                <p>Browse curated products matched to your skin type. Order, track, and review — all in one place.</p>
+                <p>Browse 120+ curated products matched to your skin type. Order, track, and review — all in one place.</p>
             </div>
         </div>
     </div>
@@ -87,9 +87,16 @@
             <% featured.forEach(product => { %>
                 <a href="/products/<%= product.Product_id %>" class="product-card">
                     <div class="product-image">
-                        <div class="product-placeholder-img">
-                            <i class="fas fa-pump-soap"></i>
-                        </div>
+                        <% if (product.Image_url && product.Image_url.startsWith('http')) { %>
+                            <img src="<%= product.Image_url %>" alt="<%= product.Product_name %>" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                            <div class="product-placeholder-img" style="display:none">
+                                <i class="fas fa-pump-soap"></i>
+                            </div>
+                        <% } else { %>
+                            <div class="product-placeholder-img">
+                                <i class="fas fa-pump-soap"></i>
+                            </div>
+                        <% } %>
                         <span class="product-badge skin-<%= product.P_Skin_type.toLowerCase() %>"><%= product.P_Skin_type %></span>
                     </div>
                     <div class="product-info">
