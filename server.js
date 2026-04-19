@@ -62,6 +62,7 @@ const orderRoutes = require('./routes/orders');
 const reviewRoutes = require('./routes/reviews');
 const assistantRoutes = require('./routes/assistant');
 const cartRoutes = require('./routes/cart');
+const productImageRoutes = require('./routes/productImage');
 
 app.use('/auth', authRoutes);
 app.use('/quiz', quizRoutes);
@@ -70,6 +71,7 @@ app.use('/orders', orderRoutes);
 app.use('/reviews', reviewRoutes);
 app.use('/assistant', assistantRoutes);
 app.use('/cart', cartRoutes);
+app.use('/product-image', productImageRoutes);
 
 // Home Page
 app.get('/', async (req, res) => {
@@ -126,7 +128,21 @@ app.use((req, res) => {
 });
 
 // Start Server (after database initialization)
-db.initialize().then(() => {
+db.initialize().then(async () => {
+    // Update all product image URLs to use our dynamic SVG endpoint
+    try {
+        const [allProducts] = await db.query('SELECT Product_id FROM Product');
+        for (const p of allProducts) {
+            await db.query(
+                'UPDATE Product SET Image_url = ? WHERE Product_id = ?',
+                [`/product-image/${p.Product_id}`, p.Product_id]
+            );
+        }
+        console.log(`✅ Updated ${allProducts.length} product image URLs`);
+    } catch (err) {
+        console.error('Image URL update warning:', err.message);
+    }
+
     app.listen(PORT, () => {
         console.log(`\n✨ LUMINAR is running at http://localhost:${PORT}\n`);
     });

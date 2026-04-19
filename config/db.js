@@ -270,99 +270,8 @@ function createTables() {
 function seedDatabase() {
     db.run("BEGIN TRANSACTION");
 
-    // ----- Category-specific product images (curated from Unsplash — face skincare only) -----
-    const categoryImages = {
-        Cleanser: [
-            'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1609097154293-1d04b5e8184d?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1631729371254-42c2892f0e6e?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1570194065650-d99fb4ee6420?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1619451334792-150fd785ee74?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1585652757141-8837d023e12a?w=400&h=400&fit=crop'
-        ],
-        Serum: [
-            'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1611930022073-b7a4ba5fcccd?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1570194065650-d99fb4ee6420?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1583209814683-c023dd293cc6?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1617897903246-719242758050?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1576426863848-c21f53c60b19?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?w=400&h=400&fit=crop'
-        ],
-        Moisturizer: [
-            'https://images.unsplash.com/photo-1570194065650-d99fb4ee6420?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1617897903246-719242758050?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1612817288484-6f916006741a?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=400&h=400&fit=crop'
-        ],
-        Sunscreen: [
-            'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1619451334792-150fd785ee74?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1583209814683-c023dd293cc6?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1631729371254-42c2892f0e6e?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1612817288484-6f916006741a?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1585652757141-8837d023e12a?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1576426863848-c21f53c60b19?w=400&h=400&fit=crop'
-        ],
-        Toner: [
-            'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1611930022073-b7a4ba5fcccd?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1631729371254-42c2892f0e6e?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1570194065650-d99fb4ee6420?w=400&h=400&fit=crop'
-        ],
-        Mask: [
-            'https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1583209814683-c023dd293cc6?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1612817288484-6f916006741a?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=400&h=400&fit=crop'
-        ],
-        'Eye Care': [
-            'https://images.unsplash.com/photo-1611930022073-b7a4ba5fcccd?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1570194065650-d99fb4ee6420?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1631729371254-42c2892f0e6e?w=400&h=400&fit=crop'
-        ],
-        Treatment: [
-            'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1583209814683-c023dd293cc6?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1617897903246-719242758050?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1612817288484-6f916006741a?w=400&h=400&fit=crop'
-        ],
-        'Lip Care': [
-            'https://images.unsplash.com/photo-1586495777744-4413f21062fa?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1631729371254-42c2892f0e6e?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=400&h=400&fit=crop'
-        ],
-        Mist: [
-            'https://images.unsplash.com/photo-1617897903246-719242758050?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1612817288484-6f916006741a?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1570194065650-d99fb4ee6420?w=400&h=400&fit=crop'
-        ]
-    };
-
-    const imageCounters = {};
-    function getImg(category) {
-        const pool = categoryImages[category] || categoryImages.Cleanser;
-        if (!imageCounters[category]) imageCounters[category] = 0;
-        const img = pool[imageCounters[category] % pool.length];
-        imageCounters[category]++;
-        return img;
-    }
+    // ----- Product image generation (branded placeholders) -----
+    // Each product gets a unique image showing its brand name and product name
 
     // ===== 20 Brands =====
     const brands = [
@@ -996,8 +905,19 @@ function seedDatabase() {
          'Spritz after makeup or anytime for a dewy, refreshed look.']
     ];
 
+    // Brand name lookup for product image generation
+    const brandNames = {};
+    brands.forEach((b, i) => { brandNames[i + 1] = b[0]; });
+
+    function makeProductImage(productName, brandId) {
+        const brand = brandNames[brandId] || 'Luminar';
+        const shortName = productName.length > 28 ? productName.substring(0, 26) + '..' : productName;
+        const text = (brand + '\n' + shortName).replace(/ /g, '+').replace(/\n/g, '%0A').replace(/'/g, '').replace(/&/g, '%26');
+        return `https://placehold.co/400x400/1a1625/c9a0dc/png?text=${text}`;
+    }
+
     products.forEach(p => {
-        const imageUrl = getImg(p[1]); // p[1] is the Category
+        const imageUrl = makeProductImage(p[0], p[4]); // p[0]=name, p[4]=brandId
         db.run(
             "INSERT INTO Product (Product_name, Category, P_Skin_type, Price, Brand_id, Description, Image_url, Ingredients, How_to_use) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [p[0], p[1], p[2], p[3], p[4], p[5], imageUrl, p[6], p[7]]

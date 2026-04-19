@@ -32,14 +32,14 @@ const upload = multer({
     }
 });
 
-// Free AI API configuration using Groq (free tier with Llama 3)
+// Free AI API configuration
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
 // Helper to call Groq/Llama API
-async function callAI(messages, maxTokens = 800) {
+async function callGroq(messages, maxTokens = 800) {
     if (!GROQ_API_KEY) return null;
-    
     try {
         const response = await fetch(GROQ_API_URL, {
             method: 'POST',
@@ -54,18 +54,58 @@ async function callAI(messages, maxTokens = 800) {
                 temperature: 0.7
             })
         });
-        
-        if (!response.ok) {
-            console.error('Groq API error:', response.status);
-            return null;
-        }
-        
+        if (!response.ok) return null;
         const data = await response.json();
         return data.choices?.[0]?.message?.content || null;
     } catch (err) {
-        console.error('AI API call failed:', err.message);
+        console.error('Groq API failed:', err.message);
         return null;
     }
+}
+
+// Helper to call Google Gemini API (free tier) — with full conversation history
+async function callGemini(messages, maxTokens = 800) {
+    if (!GEMINI_API_KEY) return null;
+    try {
+        const systemMsg = messages.find(m => m.role === 'system');
+        // Build full conversation for Gemini
+        const chatMessages = messages.filter(m => m.role !== 'system');
+        const contents = chatMessages.map(m => ({
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: m.content }]
+        }));
+        // Ensure conversation alternates; if empty, add a placeholder
+        if (contents.length === 0) {
+            contents.push({ role: 'user', parts: [{ text: 'Hello' }] });
+        }
+        const body = {
+            contents,
+            generationConfig: { temperature: 0.8, maxOutputTokens: maxTokens }
+        };
+        if (systemMsg) {
+            body.systemInstruction = { parts: [{ text: systemMsg.content }] };
+        }
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!response.ok) return null;
+        const data = await response.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+    } catch (err) {
+        console.error('Gemini API failed:', err.message);
+        return null;
+    }
+}
+
+// Unified AI caller — tries Groq first, then Gemini — passes full history
+async function callAI(messages, maxTokens = 800) {
+    let result = await callGroq(messages, maxTokens);
+    if (result) return result;
+    result = await callGemini(messages, maxTokens);
+    return result;
 }
 
 // GET Assistant Page
@@ -83,15 +123,21 @@ router.post('/chat', isAuthenticated, async (req, res) => {
             return res.json({ error: 'Please enter a message' });
         }
 
+        // Initialize conversation history in session
+        if (!req.session.chatHistory) {
+            req.session.chatHistory = [];
+        }
+
         let reply = '';
         const skinType = user.C_Skin_type || 'Normal';
         const concerns = user.Skin_concerns || 'None specified';
 
-        // Get relevant products from DB for context
+        // Get relevant products from DB for context — randomize selection
         const [products] = await db.query(`
             SELECT p.Product_name, p.Category, p.P_Skin_type, p.Price, p.Description, b.Brand_name
             FROM Product p JOIN Brand b ON p.Brand_id = b.Brand_id
             WHERE p.P_Skin_type IN (?, 'All')
+            ORDER BY RANDOM()
             LIMIT 20
         `, [skinType]);
 
@@ -99,11 +145,10 @@ router.post('/chat', isAuthenticated, async (req, res) => {
             `${p.Brand_name} ${p.Product_name} (${p.Category}, ₹${p.Price}, for ${p.P_Skin_type} skin): ${p.Description}`
         ).join('\n');
 
-        // Try AI API first
-        const aiReply = await callAI([
-            {
-                role: 'system',
-                content: `You are Luminar AI, a professional, empathetic, and highly knowledgeable skincare consultant for the Luminar skincare website. You respond like a real dermatologist or skincare expert who truly LISTENS to the patient.
+        // Build conversation history for AI (last 10 messages for context)
+        const recentHistory = req.session.chatHistory.slice(-10);
+
+        const systemPrompt = `You are Luminar AI, a professional, empathetic, and highly knowledgeable skincare consultant for the Luminar skincare website. You respond like a real dermatologist or skincare expert who truly LISTENS to the patient.
 
 Customer Profile:
 - Name: ${user.Cust_name}
@@ -119,41 +164,54 @@ CRITICAL RULES — Follow these STRICTLY:
 
 2. **If the user mentions a specific product causing problems** (e.g., "I was using Cetaphil cleanser and got acne"):
    - FIRST acknowledge what they said
-   - Explain possible reasons WHY that product might have caused the issue (wrong for their skin type, ingredient sensitivity, purging vs reaction, comedogenic ingredients, wrong application method, etc.)
+   - Explain possible reasons WHY that product might have caused the issue
    - Suggest whether they should stop or continue
    - THEN, and ONLY THEN, suggest alternatives
 
 3. **DO NOT randomly recommend products.** Only recommend products when:
    - The user explicitly asks for recommendations
    - You have fully answered their question first and product suggestions are a natural next step
-   - The context naturally calls for it (e.g., they ask "what should I use instead")
+   - The context naturally calls for it
 
-4. **Give DETAILED, THOUGHTFUL explanations.** Don't give generic answers. Tailor your response to their specific situation:
-   - If they describe symptoms, analyze those specific symptoms
-   - If they mention a specific routine or product, address that specifically
-   - Explain the science/reasoning behind your advice
-   - Include "why" not just "what"
+4. **Give DETAILED, THOUGHTFUL explanations.** Don't give generic answers.
 
-5. **Be conversational and empathetic.** The user should feel like they're talking to a caring expert, not reading a product catalog.
+5. **NEVER repeat a previous response.** Each answer MUST be unique and different from anything you said before in this conversation. If the user asks a similar question, provide NEW information, different product suggestions, or a different angle.
 
-6. **Format well for readability:** Use bold, bullet points, and organized sections.
+6. **Be conversational and empathetic.** Format well with bold, bullet points, and sections.
 
 7. **Use ₹ for prices** when mentioning products.
 
 8. **If asked about things unrelated to skincare**, politely redirect.
 
-9. **For serious conditions**, recommend seeing a dermatologist without giving medical diagnoses.
+9. **For serious conditions**, recommend seeing a dermatologist.
 
-Remember: You are a skincare ADVISOR first, and a product recommender second. Answer the question, THEN recommend only if appropriate.`
-            },
+Remember: You are a skincare ADVISOR first, and a product recommender second.`;
+
+        // Build full message array with history
+        const aiMessages = [
+            { role: 'system', content: systemPrompt },
+            ...recentHistory,
             { role: 'user', content: message }
-        ]);
+        ];
+
+        // Try AI API first
+        const aiReply = await callAI(aiMessages);
 
         if (aiReply) {
             reply = aiReply;
         } else {
-            // Enhanced rule-based fallback
-            reply = await getEnhancedResponse(message, user, products);
+            // Enhanced rule-based fallback with anti-repetition
+            reply = await getEnhancedResponse(message, user, products, req.session);
+        }
+
+        // Store in conversation history
+        req.session.chatHistory.push(
+            { role: 'user', content: message },
+            { role: 'assistant', content: reply }
+        );
+        // Keep history manageable (last 20 messages)
+        if (req.session.chatHistory.length > 20) {
+            req.session.chatHistory = req.session.chatHistory.slice(-20);
         }
 
         res.json({ reply });
@@ -299,167 +357,323 @@ router.get('/tips', isAuthenticated, async (req, res) => {
 // ================================================
 // Enhanced rule-based response (much more comprehensive)
 // ================================================
-async function getEnhancedResponse(message, user, products) {
+async function getEnhancedResponse(message, user, products, session) {
     const msg = message.toLowerCase();
     const skinType = user.C_Skin_type || 'Normal';
 
+    // Track used response keys to avoid repetition
+    if (!session.usedResponses) session.usedResponses = [];
+
+    // Helper to pick random items from an array
+    function pickRandom(arr, count) {
+        const shuffled = [...arr].sort(() => 0.5 - Math.random());
+        return shuffled.slice(0, count);
+    }
+
+    // Helper to mark a response key as used and check if it was used before
+    function wasUsed(key) {
+        if (session.usedResponses.includes(key)) return true;
+        session.usedResponses.push(key);
+        if (session.usedResponses.length > 30) session.usedResponses = session.usedResponses.slice(-15);
+        return false;
+    }
+
+    // Get random products for the user's skin type
+    async function getRandomProducts(searchTerm, limit = 4) {
+        const [prods] = await db.query(`
+            SELECT p.Product_name, p.Price, b.Brand_name, p.Description, p.Category FROM Product p
+            JOIN Brand b ON p.Brand_id = b.Brand_id
+            WHERE p.Description LIKE ? OR p.Category LIKE ? OR p.P_Skin_type IN (?, 'All')
+            ORDER BY RANDOM()
+            LIMIT ?
+        `, [`%${searchTerm}%`, `%${searchTerm}%`, skinType, limit]);
+        return prods;
+    }
+
     // ===== PRIORITY 1: User mentions a specific product causing problems =====
-    const productProblemPatterns = [
-        /(?:using|used|tried|started|applied|switched to)\s+(.+?)(?:\s+and\s+|\s+but\s+)(?:got|getting|having|caused|gave me|started|experiencing)\s+(.+)/i,
-        /(?:after|since)\s+(?:using|starting)\s+(.+?)[\s,]+(?:i\s+)?(?:got|getting|have|had|noticed|started|experiencing)\s+(.+)/i
-    ];
-    
+    const brands = ['cetaphil', 'cerave', 'neutrogena', 'innisfree', 'minimalist', 'plum', 'mamaearth', 'biotique', 'laneige', 'cosrx', 'simple', 'ordinary', 'la roche', 'dot & key', "paula's choice", "derma co", "re'equil", 'pilgrim', 'aqualogica', 'fixderma'];
     let productMentioned = null;
     let problemMentioned = null;
-    
-    for (const pattern of productProblemPatterns) {
-        const match = message.match(pattern);
-        if (match) {
-            productMentioned = match[1].trim();
-            problemMentioned = match[2].trim();
+
+    for (const brand of brands) {
+        if (msg.includes(brand)) {
+            productMentioned = brand.charAt(0).toUpperCase() + brand.slice(1);
+            if (msg.includes('acne') || msg.includes('pimple') || msg.includes('breakout')) problemMentioned = 'acne/breakouts';
+            else if (msg.includes('irritat') || msg.includes('burn') || msg.includes('sting') || msg.includes('red')) problemMentioned = 'irritation/redness';
+            else if (msg.includes('dry') || msg.includes('peel') || msg.includes('flak')) problemMentioned = 'dryness/peeling';
+            else if (msg.includes('oily') || msg.includes('greasy')) problemMentioned = 'excess oiliness';
+            else if (msg.includes('worse') || msg.includes('bad') || msg.includes('not working')) problemMentioned = 'worsening condition';
             break;
         }
     }
-    
-    // Also check for simpler patterns like "cetaphil gave me acne"
-    if (!productMentioned) {
-        const brands = ['cetaphil', 'cerave', 'neutrogena', 'innisfree', 'minimalist', 'plum', 'mamaearth', 'biotique', 'laneige', 'cosrx', 'simple', 'ordinary', 'la roche', 'dot & key', "paula's choice", "derma co", "re'equil", 'pilgrim', 'aqualogica', 'fixderma'];
-        for (const brand of brands) {
-            if (msg.includes(brand)) {
-                productMentioned = brand;
-                if (msg.includes('acne') || msg.includes('pimple') || msg.includes('breakout')) problemMentioned = 'acne/breakouts';
-                else if (msg.includes('irritat') || msg.includes('burn') || msg.includes('sting') || msg.includes('red')) problemMentioned = 'irritation/redness';
-                else if (msg.includes('dry') || msg.includes('peel') || msg.includes('flak')) problemMentioned = 'dryness/peeling';
-                else if (msg.includes('oily') || msg.includes('greasy')) problemMentioned = 'excess oiliness';
-                else if (msg.includes('worse') || msg.includes('bad') || msg.includes('not working')) problemMentioned = 'worsening condition';
-                break;
-            }
+
+    if (productMentioned && problemMentioned) {
+        const alternatives = await getRandomProducts(skinType, 3);
+        const reasons = pickRandom([
+            `**Product-Skin Type Mismatch:** Your skin type is **${skinType}**. What works for one skin type can be damaging for another.`,
+            `**Ingredient Sensitivity:** Certain surfactants, fragrances, or preservatives in the formula might not agree with your unique skin chemistry.`,
+            `**Purging vs. Reaction:** With actives like AHAs, BHAs, or retinol, initial breakouts (purging) can last 4-6 weeks. Beyond that, it's a genuine reaction.`,
+            `**Wrong Application Method:** Using too much product, applying it too frequently, or layering incompatible ingredients can trigger problems.`,
+            `**Comedogenic Ingredients:** Some formulas contain silicones, coconut derivatives, or fatty alcohols that can clog pores for certain skin types.`,
+            `**Damaged Moisture Barrier:** If your barrier was already compromised, even gentle products can sting or cause flare-ups.`
+        ], 3);
+
+        let reply = `I completely understand your frustration with **${productMentioned}**, ${user.Cust_name}. Let me break down what might be happening. 💜\n\n`;
+        reply += `**Possible reasons for ${problemMentioned}:**\n\n`;
+        reasons.forEach((r, i) => { reply += `${i + 1}. ${r}\n\n`; });
+        reply += `**My Advice for You Right Now:**\n`;
+        reply += `• **${problemMentioned.includes('severe') ? 'Stop immediately' : 'Consider pausing'} ${productMentioned}** and observe your skin for 1-2 weeks\n`;
+        reply += `• **Simplify your routine:** gentle cleanser + fragrance-free moisturizer + SPF 50 only\n`;
+        reply += `• **Keep a skin diary** — note what improves and what doesn't\n\n`;
+        if (alternatives.length > 0) {
+            reply += `**Better alternatives for your ${skinType} skin:**\n`;
+            alternatives.forEach(p => { reply += `• **${p.Brand_name} ${p.Product_name}** (${p.Category}) — ₹${p.Price}\n`; });
+        }
+        reply += `\nWould you like me to create a complete gentle routine for your skin recovery? 💜`;
+        return reply;
+    }
+
+    // Hyperpigmentation / dark spots
+    if (msg.includes('hyperpigmentation') || msg.includes('dark spot') || msg.includes('pigment') || msg.includes('uneven') || msg.includes('melasma')) {
+        const prods = await getRandomProducts('brighten', 4);
+        const variant = wasUsed('hyper1') ? 2 : 1;
+
+        if (variant === 1) {
+            let reply = `Let's tackle your hyperpigmentation head-on, ${user.Cust_name}! This is one of my most asked-about concerns. 💜\n\n`;
+            reply += `**The Science Behind Dark Spots:**\nMelanocytes (pigment cells) overproduce melanin due to UV exposure, inflammation, or hormonal changes. The key is to:\n1. **Inhibit melanin production** (Vitamin C, Alpha Arbutin, Tranexamic Acid)\n2. **Speed up cell turnover** (Retinol, AHAs)\n3. **Prevent further darkening** (SPF 50+ — this is NON-NEGOTIABLE!)\n\n`;
+            reply += `**Your Anti-Pigmentation Arsenal:**\n`;
+            reply += `• **Vitamin C (15-20%)** — Morning antioxidant + brightener\n`;
+            reply += `• **Alpha Arbutin 2%** — Gentle but effective tyrosinase inhibitor\n`;
+            reply += `• **Tranexamic Acid 3%** — Best for stubborn melasma\n`;
+            reply += `• **Azelaic Acid 10%** — Dual action: anti-inflammatory + brightening\n\n`;
+            reply += `**Products from our catalog:**\n`;
+            prods.forEach(p => { reply += `• **${p.Brand_name} ${p.Product_name}** — ₹${p.Price}\n`; });
+            reply += `\n☀️ **#1 Rule:** Without SPF 50+, ALL brightening products are useless — sun recreates pigmentation faster than actives can fade it!`;
+            return reply;
+        } else {
+            let reply = `Here's a different approach to your hyperpigmentation concern! 🌟\n\n`;
+            reply += `**Layering Strategy for Maximum Brightening:**\n\n`;
+            reply += `**AM Brightening Stack:**\n1. Gentle cleanser\n2. Vitamin C serum (apply on damp skin)\n3. Niacinamide moisturizer\n4. SPF 50+ (reapply every 2-3 hours!)\n\n`;
+            reply += `**PM Fading Stack:**\n1. Oil cleanser → Water cleanser\n2. Tranexamic Acid OR Alpha Arbutin serum\n3. Azelaic Acid (on dark spots only)\n4. Ceramide moisturizer\n\n`;
+            reply += `**Products to try:**\n`;
+            prods.forEach(p => { reply += `• **${p.Brand_name} ${p.Product_name}** — ₹${p.Price}\n`; });
+            reply += `\n**Timeline:** Expect visible improvement in 6-12 weeks with consistent use. Patience is key! 💪`;
+            return reply;
         }
     }
-    
-    if (productMentioned && problemMentioned) {
-        let reply = `I hear you, ${user.Cust_name}. Let me address your concern about **${productMentioned}** specifically. 💜\n\n`;
-        reply += `**Why ${productMentioned} may have caused ${problemMentioned}:**\n\n`;
-        reply += `There are several possible reasons why this happened:\n\n`;
-        reply += `1. **Product-Skin Type Mismatch:** Your skin type is **${skinType}**. Not every well-known product suits every skin type. A product that works great for dry skin can clog pores on oily skin, and vice versa.\n\n`;
-        reply += `2. **Ingredient Sensitivity:** Some ingredients in the product (like certain surfactants, fragrances, or preservatives) might not agree with YOUR specific skin, even if the product is generally well-reviewed.\n\n`;
-        reply += `3. **Purging vs. Reaction:** If the product contains active ingredients (like AHAs, BHAs, retinol, or niacinamide), you might be experiencing **purging** — temporary breakouts that subside in 4-6 weeks. However, if it\'s been more than 6 weeks, it\'s likely a **reaction**, not purging.\n\n`;
-        reply += `4. **Wrong Usage:** Using too much product, applying it too often, or not following up with moisturizer/SPF can cause issues.\n\n`;
-        reply += `5. **Comedogenic Ingredients:** Some products contain ingredients that clog pores (comedogenic). Even "gentle" products can contain coconut derivatives or certain silicones that trigger breakouts.\n\n`;
-        
-        reply += `**What I Recommend You Do:**\n`;
-        reply += `• **Stop using ${productMentioned} immediately** if the reaction is severe (burning, excessive redness, swelling)\n`;
-        reply += `• **Simplify your routine** for 2 weeks: gentle cleanser + basic moisturizer + SPF only\n`;
-        reply += `• **Monitor your skin** — if it improves after stopping, the product was indeed the cause\n`;
-        reply += `• **Don't introduce multiple new products** at once — add one at a time, waiting 2 weeks between each\n\n`;
-        
-        reply += `**If you need an alternative**, I can suggest products from our catalog that are better suited for your **${skinType}** skin. Just let me know what type of product you need (cleanser, moisturizer, serum, etc.)! 💜`;
-        
-        return reply;
-    }
 
-    // Hyperpigmentation / dark spots - DETAILED response
-    if (msg.includes('hyperpigmentation') || msg.includes('dark spot') || msg.includes('pigment') || msg.includes('uneven') || msg.includes('melasma')) {
-        const [prods] = await db.query(`
-            SELECT p.Product_name, p.Price, b.Brand_name, p.Description FROM Product p
-            JOIN Brand b ON p.Brand_id = b.Brand_id
-            WHERE p.Description LIKE '%hyperpigmentation%' OR p.Description LIKE '%dark spot%' OR p.Description LIKE '%brighten%' OR p.Category = 'Treatment'
-            LIMIT 5
-        `);
-        let reply = `I understand how frustrating hyperpigmentation can be. Let me give you a comprehensive guide on dealing with it. 💜\n\n`;
-        reply += `**What causes hyperpigmentation?**\nHyperpigmentation occurs when melanocytes (pigment-producing cells) overproduce melanin. Common triggers include:\n• Sun exposure (UV stimulates melanin production)\n• Post-inflammatory hyperpigmentation (PIH) from acne or injuries\n• Hormonal changes (melasma, especially during pregnancy or birth control use)\n• Friction and irritation\n\n`;
-        reply += `**Key Ingredients That Work:**\n`;
-        reply += `• **Vitamin C** (10-20%) — Inhibits tyrosinase enzyme, brightens overall tone\n`;
-        reply += `• **Niacinamide** (5-10%) — Prevents melanin transfer to skin cells\n`;
-        reply += `• **Alpha Arbutin** (2%) — Safer alternative to hydroquinone\n`;
-        reply += `• **Tranexamic Acid** (3%) — Targets stubborn melasma\n`;
-        reply += `• **Azelaic Acid** (10-20%) — Anti-inflammatory + brightening\n`;
-        reply += `• **Retinol/Retinal** — Speeds cell turnover to fade dark spots\n\n`;
-        reply += `**Products I Recommend from Our Catalog:**\n`;
-        prods.forEach(p => { reply += `• **${p.Brand_name} ${p.Product_name}** — ₹${p.Price}\n`; });
-        reply += `\n**Critical Rule:** ALWAYS wear SPF 50+ sunscreen — sun exposure is the #1 reason hyperpigmentation doesn't fade or gets worse! Reapply every 2-3 hours. ☀️\n\n`;
-        reply += `**If your current cream is making it worse**, it could be:\n1. **Purging** (temporary, lasts 4-6 weeks with actives like retinol)\n2. **Irritation** causing more inflammation → more pigment\n3. The product may contain irritating fragrance or alcohol\n\nI'd recommend stopping the product for 2 weeks, using only gentle cleanser + moisturizer + sunscreen, then gradually introducing one active at a time.`;
-        return reply;
-    }
-
-    // Acne / pimples - DETAILED
+    // Acne / pimples
     if (msg.includes('acne') || msg.includes('pimple') || msg.includes('breakout') || msg.includes('zit')) {
-        const [prods] = await db.query(`
-            SELECT p.Product_name, p.Price, b.Brand_name FROM Product p
-            JOIN Brand b ON p.Brand_id = b.Brand_id
-            WHERE p.Description LIKE '%acne%' OR p.Description LIKE '%blemish%' OR p.Description LIKE '%salicylic%'
-            LIMIT 5
-        `);
-        let reply = `Acne is incredibly common and very treatable — let me help you tackle it effectively! 💪\n\n`;
-        reply += `**Understanding Your Acne:**\nAcne forms when pores get clogged with dead skin + excess oil → bacteria (C. acnes) feeds on this → inflammation → pimples.\n\n`;
-        reply += `**My Treatment Recommendations:**\n`;
-        reply += `• **Salicylic Acid (BHA 2%)** — Oil-soluble, penetrates INTO pores to dissolve clogs\n`;
-        reply += `• **Niacinamide (10%)** — Reduces inflammation, controls oil, fades acne marks\n`;
-        reply += `• **Benzoyl Peroxide (2.5%)** — Kills acne-causing bacteria on contact\n`;
-        reply += `• **Retinol** — Prevents new clogs by speeding cell turnover\n\n`;
-        reply += `**Recommended Products:**\n`;
-        prods.forEach(p => { reply += `• **${p.Brand_name} ${p.Product_name}** — ₹${p.Price}\n`; });
-        reply += `\n**Daily Routine for Acne-Prone Skin:**\n`;
-        reply += `**AM:** Gentle cleanser → Niacinamide serum → Oil-free moisturizer → SPF 50\n`;
-        reply += `**PM:** Double cleanse → BHA/Salicylic acid → Moisturizer\n\n`;
-        reply += `**Important Lifestyle Tips:**\n`;
-        reply += `• Don't pick or squeeze pimples — causes scarring and more inflammation\n`;
-        reply += `• Change pillowcases every 2-3 days\n`;
-        reply += `• Clean your phone screen daily\n`;
-        reply += `• Reduce dairy and high-sugar foods (they can trigger breakouts)\n`;
-        reply += `• Manage stress — cortisol increases oil production\n`;
-        reply += `• Drink 2-3 liters of water daily`;
-        return reply;
+        const prods = await getRandomProducts('acne', 4);
+        const variant = wasUsed('acne1') ? 2 : 1;
+
+        if (variant === 1) {
+            let reply = `Let's fight your acne together, ${user.Cust_name}! 💪\n\n`;
+            reply += `**How Acne Actually Forms:**\nClogged pore (dead skin + sebum) → C. acnes bacteria multiplies → Inflammation → Pimple\n\n`;
+            reply += `**My Proven Treatment Approach:**\n`;
+            reply += `• **Salicylic Acid (2% BHA)** — Penetrates INTO pores to dissolve clogs\n`;
+            reply += `• **Niacinamide (10%)** — Controls oil + reduces inflammation\n`;
+            reply += `• **Benzoyl Peroxide (2.5%)** — Kills bacteria (2.5% is as effective as 10% with less dryness!)\n\n`;
+            reply += `**Products matched for your skin:**\n`;
+            prods.forEach(p => { reply += `• **${p.Brand_name} ${p.Product_name}** — ₹${p.Price}\n`; });
+            reply += `\n**Lifestyle changes that help:**\n• Change pillowcases every 2-3 days\n• Clean your phone screen daily\n• Don't touch your face\n• Reduce dairy and high-glycemic foods\n• Drink 2-3L water daily`;
+            return reply;
+        } else {
+            let reply = `Let me give you a fresh perspective on managing acne, ${user.Cust_name}! 🌿\n\n`;
+            reply += `**Common Acne Mistakes to Avoid:**\n`;
+            reply += `❌ Over-washing your face (max 2x daily!)\n`;
+            reply += `❌ Using physical scrubs on active acne\n`;
+            reply += `❌ Skipping moisturizer (dehydrated skin = MORE oil!)\n`;
+            reply += `❌ Popping pimples (pushes bacteria deeper)\n`;
+            reply += `❌ Using too many actives at once\n\n`;
+            reply += `**The Right Approach:**\n`;
+            reply += `**Week 1-2:** Simplify — gentle cleanser + moisturizer + SPF only\n`;
+            reply += `**Week 3-4:** Add ONE active — start with niacinamide (least irritating)\n`;
+            reply += `**Week 5-6:** Introduce BHA 2-3 nights per week\n`;
+            reply += `**Week 7+:** Assess and adjust\n\n`;
+            reply += `**Products I'd suggest:**\n`;
+            prods.forEach(p => { reply += `• **${p.Brand_name} ${p.Product_name}** — ₹${p.Price}\n`; });
+            reply += `\n**Remember:** Acne treatment takes 6-8 weeks minimum. Don't give up after 2 weeks! 💜`;
+            return reply;
+        }
     }
 
     // Product recommendations
     if (msg.includes('recommend') || msg.includes('suggest') || msg.includes('best product') || msg.includes('what should')) {
-        const shuffled = products.sort(() => 0.5 - Math.random()).slice(0, 5);
-        let reply = `Based on your **${skinType}** skin type, here are my top recommendations:\n\n`;
+        const shuffled = pickRandom(products, 5);
+        const intros = [
+            `Based on your **${skinType}** skin profile, here are my personalized picks:`,
+            `I've curated these specifically for **${skinType}** skin, ${user.Cust_name}:`,
+            `Here are my top recommendations tailored for your **${skinType}** skin type:`,
+            `For your **${skinType}** skin, these products would work wonderfully:`
+        ];
+        let reply = `${pickRandom(intros, 1)[0]} 💜\n\n`;
         shuffled.forEach(p => {
-            reply += `• **${p.Brand_name} ${p.Product_name}** (${p.Category}) — ₹${p.Price}\n  _${p.Description.substring(0, 100)}..._\n\n`;
+            reply += `• **${p.Brand_name} ${p.Product_name}** (${p.Category}) — ₹${p.Price}\n  _${p.Description.substring(0, 120)}_\n\n`;
         });
-        reply += `Would you like me to create a complete skincare routine for you, or know more about any specific product? 💜`;
+        const closings = [
+            `Would you like me to create a complete routine with these products?`,
+            `Shall I explain how to use any of these in detail?`,
+            `Want me to build a morning and night routine around these?`,
+            `Would you like budget alternatives for any of these?`
+        ];
+        reply += pickRandom(closings, 1)[0] + ` 💜`;
         return reply;
     }
 
     // Dry skin
     if (msg.includes('dry') || msg.includes('hydrat') || msg.includes('moistur') || msg.includes('flak')) {
-        return `For **dry skin**, hydration is absolutely crucial! Here's a comprehensive approach: 💧\n\n**Your Ideal Routine:**\n**AM:** Cream/milk cleanser (no foaming!) → Hyaluronic acid serum on DAMP skin → Rich cream moisturizer → SPF 50 (cream-based)\n**PM:** Oil cleanser → Cream cleanser → HA serum → Facial oil or sleeping mask\n\n**Hero Ingredients for Dry Skin:**\n• **Hyaluronic Acid** — Holds 1000x its weight in water\n• **Ceramides** — Repair the moisture barrier\n• **Squalane** — Lightweight oil that mimics skin's natural sebum\n• **Glycerin** — Powerful humectant\n• **Shea Butter** — Deep, lasting hydration\n\n**What to AVOID:**\n• Foaming cleansers (they strip natural oils)\n• Alcohol-based toners\n• Hot water on face (use lukewarm)\n• Over-exfoliating (max 1-2x per week)\n\n**Pro Tips:**\n• Apply HA serum on damp skin — it needs water to work!\n• Layer products thinnest → thickest\n• Use a humidifier in dry weather\n• Drink at least 2-3 liters of water daily\n\nWant me to recommend specific products from our catalog? 💜`;
+        const prods = await getRandomProducts('hydrat', 3);
+        const variant = wasUsed('dry1') ? 2 : 1;
+        if (variant === 1) {
+            let reply = `For your **dry skin** concerns, here's a science-backed hydration plan! 💧\n\n`;
+            reply += `**The Hydration Sandwich Method:**\n1. Apply toner/essence on damp skin\n2. Layer hyaluronic acid serum\n3. Seal with a rich cream moisturizer\n4. Add facial oil on TOP (acts as occlusive seal)\n\n`;
+            reply += `**Hero Ingredients:**\n• **Hyaluronic Acid** — Holds 1000x its weight in water (apply on DAMP skin!)\n• **Ceramides** — Repair moisture barrier\n• **Squalane** — Mimics natural sebum\n• **Glycerin** — Draws moisture from air\n\n`;
+            reply += `**Products for you:**\n`;
+            prods.forEach(p => { reply += `• **${p.Brand_name} ${p.Product_name}** — ₹${p.Price}\n`; });
+            reply += `\n**Avoid:** Foaming cleansers, alcohol toners, hot water, over-exfoliating 💜`;
+            return reply;
+        } else {
+            let reply = `Let me share some advanced hydration strategies, ${user.Cust_name}! 🌊\n\n`;
+            reply += `**Why Dry Skin Gets Worse:**\n• Damaged moisture barrier lets water escape (TEWL)\n• Low humidity environments\n• Hot showers (strip natural oils!)\n• Over-exfoliating\n\n`;
+            reply += `**My Recovery Plan:**\n**AM:** Cream cleanser → HA serum (damp skin!) → Ceramide cream → Cream-based SPF\n**PM:** Oil cleanser → Milk cleanser → HA + B5 → Facial oil → Sleeping mask\n\n`;
+            reply += `**These products would help:**\n`;
+            prods.forEach(p => { reply += `• **${p.Brand_name} ${p.Product_name}** — ₹${p.Price}\n`; });
+            reply += `\n**Pro tip:** Use a humidifier and drink 2-3L water daily! 💜`;
+            return reply;
+        }
     }
 
     // Oily skin
     if (msg.includes('oily') || msg.includes('shine') || msg.includes('greasy') || msg.includes('sebum') || msg.includes('pore')) {
-        return `For **oily skin**, the key is balance — not stripping! Here's why and how: 💚\n\n**Your Ideal Routine:**\n**AM:** Gel/foam cleanser → Niacinamide serum → Lightweight gel moisturizer → Oil-free/gel SPF\n**PM:** Oil cleanser (yes, oil!) → Gel cleanser → BHA/Salicylic acid toner → Niacinamide → Light moisturizer\n\n**Hero Ingredients for Oily Skin:**\n• **Niacinamide (10%)** — Proven to reduce sebum by 25%\n• **Salicylic Acid (BHA)** — Dissolves oil inside pores\n• **Green Tea** — Natural sebum control + antioxidant\n• **Zinc** — Anti-inflammatory, reduces oil\n• **Hyaluronic Acid** — Yes! Oily skin needs hydration too!\n\n**Common Mistakes:**\n• Skipping moisturizer — dehydrated skin produces MORE oil!\n• Over-washing face (max 2x daily)\n• Using harsh, stripping cleansers\n• Over-exfoliating with physical scrubs\n\n**Diet Tips:**\n• Reduce dairy, sugar, and fried foods\n• Eat omega-3 rich foods (fish, walnuts, flax seeds)\n• Green tea (drink it AND apply it!)\n• Stay hydrated — water helps regulate oil production\n\nWant me to build a complete routine with specific products? 💜`;
+        const prods = await getRandomProducts('oil control', 3);
+        let reply = `The key to managing **oily skin** is balance, not stripping! 💚\n\n`;
+        reply += `**Why Over-Stripping Makes It WORSE:**\nWhen you strip too much oil → Skin panics → Produces EVEN MORE oil to compensate!\n\n`;
+        reply += `**Smart Oil-Control Routine:**\n**AM:** Gel cleanser → Niacinamide 10% → Gel moisturizer → Matte SPF\n**PM:** Oil cleanser (paradoxically helps!) → Gel cleanser → BHA toner (2-3x/week) → Light moisturizer\n\n`;
+        reply += `**Star Ingredients:**\n• **Niacinamide 10%** — Reduces sebum by up to 25%\n• **Salicylic Acid** — Cleans inside the pore\n• **Green Tea** — Natural antioxidant + oil control\n• **Zinc** — Anti-inflammatory\n\n`;
+        reply += `**Products for you:**\n`;
+        prods.forEach(p => { reply += `• **${p.Brand_name} ${p.Product_name}** — ₹${p.Price}\n`; });
+        reply += `\n**Don't skip moisturizer!** Dehydrated oily skin overproduces sebum. 💜`;
+        return reply;
     }
 
     // Sensitive skin
     if (msg.includes('sensitive') || msg.includes('irritat') || msg.includes('redness') || msg.includes('react') || msg.includes('sting')) {
-        return `For **sensitive skin**, less is more — and ingredient quality matters most! 🌸\n\n**Your Ideal Routine (Keep it Simple!):**\n**AM:** Ultra-gentle cream cleanser → Soothing serum (centella/CICA) → Barrier cream with ceramides → Mineral SPF 50\n**PM:** Micellar water → Gentle cleanser → Calming serum → Rich moisturizer\n\n**Hero Ingredients for Sensitive Skin:**\n• **Centella Asiatica (CICA)** — Calms inflammation, speeds healing\n• **Ceramides** — Rebuild and protect the barrier\n• **Panthenol (Vitamin B5)** — Soothes and hydrates\n• **Allantoin** — Anti-irritant and moisturizing\n• **Oat Extract (Colloidal Oatmeal)** — Natural anti-inflammatory\n\n**AVOID These Ingredients:**\n❌ Fragrance/perfume (even "natural" fragrances)\n❌ Essential oils (lavender, tea tree can irritate)\n❌ Alcohol denat.\n❌ Harsh surfactants (SLS)\n❌ High-concentration acids without buffering\n\n**Important Rules:**\n• Always patch test new products (behind ear, 48 hours)\n• Introduce ONE new product at a time (wait 2 weeks)\n• Look for "fragrance-free" (not "unscented")\n• Avoid drastic temperature changes on skin\n\nWant specific product recommendations? 💜`;
+        const prods = await getRandomProducts('sooth', 3);
+        let reply = `Sensitive skin needs a "less is more" approach, ${user.Cust_name}! 🌸\n\n`;
+        reply += `**Golden Rules for Sensitive Skin:**\n1. **Max 4-5 products** in your routine\n2. **Patch test everything** (inner arm, 48 hours)\n3. **One new product at a time** (wait 2 weeks between)\n4. **"Fragrance-free" ≠ "Unscented"** — always choose fragrance-free\n\n`;
+        reply += `**Your Safe Ingredients:**\n✅ Centella Asiatica (CICA) — calms inflammation\n✅ Ceramides — barrier repair\n✅ Panthenol (B5) — soothes\n✅ Colloidal Oatmeal — natural anti-inflammatory\n\n`;
+        reply += `**Avoid These:**\n❌ Fragrance, essential oils, alcohol denat, SLS, high-dose acids\n\n`;
+        reply += `**Gentle products for you:**\n`;
+        prods.forEach(p => { reply += `• **${p.Brand_name} ${p.Product_name}** — ₹${p.Price}\n`; });
+        reply += `\nWant me to build a minimal, calming routine? 💜`;
+        return reply;
     }
 
     // Skincare routine
     if (msg.includes('routine') || msg.includes('regimen') || msg.includes('steps') || msg.includes('morning') || msg.includes('night')) {
-        return `Here's a complete **${skinType} skin** routine — morning and night! ✨\n\n**☀️ Morning (AM) — 5 Steps:**\n1. 🧼 **Gentle Cleanser** — Remove overnight buildup (use lukewarm water)\n2. 💧 **Toner/Essence** — Balance pH, prep skin for actives\n3. ✨ **Serum** — Vitamin C (brightening) OR Niacinamide (oil control)\n4. 🧴 **Moisturizer** — Lock in hydration (gel for oily, cream for dry)\n5. ☀️ **Sunscreen SPF 50+** — THE most important step! Apply 2-3 finger lengths\n\n**🌙 Evening (PM) — 6 Steps:**\n1. 🧼 **Oil Cleanser** — Remove sunscreen, makeup, pollution\n2. 🧼 **Water-Based Cleanser** — Deep clean (double cleansing!)\n3. 💧 **Exfoliating Toner** — BHA for oily, AHA for dry (2-3x/week)\n4. ✨ **Treatment Serum** — Retinol (anti-aging) OR targeted treatment\n5. 👁️ **Eye Cream** — Gentle patting with ring finger\n6. 🧴 **Night Cream/Sleeping Mask** — Heavier than daytime moisturizer\n\n**📅 Weekly Extras:**\n• Face mask (1-2x per week) — clay for oily, hydrating for dry\n• Chemical exfoliation — start slow, build up gradually\n\n**⏱️ Wait Times Between Steps:**\n• After actives (Vitamin C, AHA/BHA): wait 1-2 minutes\n• After moisturizer, before SPF: wait 1-2 minutes\n\nWant me to recommend specific products for each step? Use our **Routine Generator** for a complete personalized plan! 💜`;
+        const cleanser = pickRandom(products.filter(p => p.Category === 'Cleanser'), 1)[0];
+        const serum = pickRandom(products.filter(p => p.Category === 'Serum'), 1)[0];
+        const moisturizer = pickRandom(products.filter(p => p.Category === 'Moisturizer'), 1)[0];
+        let reply = `Here's a complete **${skinType} skin** routine crafted just for you! ✨\n\n`;
+        reply += `**☀️ Morning (AM):**\n`;
+        reply += `1. 🧼 **Cleanser** — ${cleanser ? `${cleanser.Brand_name} ${cleanser.Product_name} (₹${cleanser.Price})` : 'Gentle cream/gel cleanser'}\n`;
+        reply += `2. 💧 **Toner** — Balance pH, prep skin\n`;
+        reply += `3. ✨ **Serum** — ${serum ? `${serum.Brand_name} ${serum.Product_name} (₹${serum.Price})` : 'Vitamin C or Niacinamide'}\n`;
+        reply += `4. 🧴 **Moisturizer** — ${moisturizer ? `${moisturizer.Brand_name} ${moisturizer.Product_name} (₹${moisturizer.Price})` : 'Suited to your skin type'}\n`;
+        reply += `5. ☀️ **SPF 50+** — 2-3 finger lengths, reapply every 2-3 hours\n\n`;
+        reply += `**🌙 Evening (PM):**\n`;
+        reply += `1. 🧼 **Oil/Balm Cleanser** — Remove SPF + pollutants\n`;
+        reply += `2. 🧼 **Water Cleanser** — Double cleansing!\n`;
+        reply += `3. 💧 **Exfoliating Toner** — AHA/BHA 2-3x/week\n`;
+        reply += `4. ✨ **Treatment** — Retinol or targeted serum\n`;
+        reply += `5. 🧴 **Night Cream** — Richer than daytime moisturizer\n\n`;
+        reply += `**⏱️ Wait 1-2 minutes between actives for better absorption!**\n\nUse our **Routine Generator** on the right panel for a fully customized plan! 💜`;
+        return reply;
     }
 
     // Sunscreen
     if (msg.includes('sunscreen') || msg.includes('spf') || msg.includes('sun protect') || msg.includes('tan')) {
-        return `**Sunscreen is the #1 anti-aging and anti-pigmentation product — non-negotiable!** ☀️\n\nFor your **${skinType}** skin:\n\n**Which SPF Type to Choose:**\n• **Oily skin:** Gel/aqua-based, oil-free, matte finish SPF\n• **Dry skin:** Cream-based SPF with moisturizing ingredients\n• **Sensitive skin:** Mineral/physical SPF (zinc oxide, titanium dioxide)\n• **Combination:** Lightweight fluid or aqua-gel SPF\n\n**The Rules of Sunscreen:**\n• Apply SPF 50+ every single morning — even indoors (UVA passes through windows!)\n• Use 2-3 finger lengths for face + neck\n• Reapply every 2-3 hours if outdoors\n• Apply AFTER moisturizer, BEFORE makeup\n• No SPF = all your serums and treatments are wasted!\n\n**Common Myths Busted:**\n• "I'm dark-skinned, I don't need SPF" — FALSE! All skin tones get UV damage\n• "SPF in makeup is enough" — FALSE! You'd need 7 layers of foundation for adequate protection\n• "SPF 100 is twice as good as 50" — FALSE! SPF 50 blocks 98%, SPF 100 blocks 99%\n\nCheck our **Sunscreen** collection for options starting from ₹199! 💜`;
+        const prods = await getRandomProducts('sunscreen', 3);
+        let reply = `**Sunscreen = the ultimate anti-aging + anti-pigmentation product!** ☀️\n\n`;
+        reply += `**For your ${skinType} skin, choose:**\n`;
+        if (skinType === 'Oily') reply += `→ Gel/aqua-based, matte finish, oil-free formula\n`;
+        else if (skinType === 'Dry') reply += `→ Cream-based SPF with moisturizing ingredients\n`;
+        else if (skinType === 'Sensitive') reply += `→ Mineral/physical SPF (zinc oxide + titanium dioxide)\n`;
+        else reply += `→ Lightweight fluid or aqua-gel texture\n`;
+        reply += `\n**Application Rules:**\n• Apply 2-3 finger lengths for face + neck\n• Apply AFTER moisturizer, BEFORE makeup\n• Reapply every 2-3 hours if outdoors\n• Yes, even indoors — UVA passes through windows!\n\n`;
+        reply += `**Our top sunscreens:**\n`;
+        prods.forEach(p => { reply += `• **${p.Brand_name} ${p.Product_name}** — ₹${p.Price}\n`; });
+        reply += `\n**Myth buster:** SPF in makeup isn't enough — you'd need 7 layers of foundation! 😅💜`;
+        return reply;
     }
 
     // Aging concerns
     if (msg.includes('aging') || msg.includes('wrinkle') || msg.includes('fine line') || msg.includes('anti-age') || msg.includes('sagging')) {
-        return `Let's talk about anti-aging — it's never too early or too late to start! ✨\n\n**The Science of Skin Aging:**\n• **Intrinsic aging** — Genetics, natural collagen loss (1% per year after 25)\n• **Extrinsic aging** — Sun damage (90% of visible aging!), pollution, lifestyle\n\n**Gold Standard Anti-Aging Ingredients:**\n1. **Retinol/Retinal** — Stimulates collagen, speeds cell turnover, reduces wrinkles\n2. **Vitamin C** — Antioxidant, stimulates collagen, brightens\n3. **Peptides** — Signal skin to produce more collagen\n4. **Hyaluronic Acid** — Plumps and hydrates, fills fine lines\n5. **Niacinamide** — Improves firmness, reduces fine lines\n6. **SPF** — PREVENTS 90% of aging signs!\n\n**Anti-Aging Routine:**\n**AM:** Gentle cleanser → Vitamin C serum → Peptide moisturizer → SPF 50+\n**PM:** Double cleanse → Retinol (start 0.2%, build up) → Rich night cream\n\n**Lifestyle Tips:**\n• Sleep 7-8 hours (skin repairs at night)\n• Don't smoke (accelerates aging by 10+ years)\n• Eat antioxidant-rich foods (berries, leafy greens)\n• Stay hydrated\n• Manage stress (cortisol breaks down collagen)\n\nWant me to recommend specific anti-aging products? 💜`;
+        const prods = await getRandomProducts('retinol', 3);
+        let reply = `Let's talk anti-aging science, ${user.Cust_name}! ✨\n\n`;
+        reply += `**Did you know?** 90% of visible aging is from sun damage, not genetics!\n\n`;
+        reply += `**The Anti-Aging Power Trio:**\n1. **Retinol** — Boosts collagen, speeds cell turnover (start 0.2%, PM only)\n2. **Vitamin C** — Antioxidant shield + collagen stimulator (AM)\n3. **SPF 50+** — Prevents 90% of aging signs (daily, rain or shine!)\n\n`;
+        reply += `**Your Anti-Aging Routine:**\n**AM:** Cleanser → Vitamin C → Moisturizer → SPF 50+\n**PM:** Double cleanse → Retinol (build up slowly) → Rich night cream\n\n`;
+        reply += `**Products to consider:**\n`;
+        prods.forEach(p => { reply += `• **${p.Brand_name} ${p.Product_name}** — ₹${p.Price}\n`; });
+        reply += `\n**Start retinol slowly:** 1x/week → 2x/week → every other night → nightly (over 6-8 weeks) 💜`;
+        return reply;
     }
 
     // Ingredient questions
     if (msg.includes('ingredient') || msg.includes('niacinamide') || msg.includes('retinol') || msg.includes('vitamin c') || msg.includes('hyaluronic') || msg.includes('salicylic')) {
-        return `Great question about ingredients! Here's a cheat sheet of the most effective skincare actives: 🔬\n\n**🌟 Niacinamide (Vitamin B3)**\n• Controls oil, minimizes pores, fades dark spots\n• Safe to use with almost everything, AM and PM\n• Best at 5-10% concentration\n\n**🌟 Retinol/Retinal**\n• Gold standard for anti-aging\n• Reduces wrinkles, acne, pigmentation\n• Start low (0.2%), use PM only, ALWAYS use SPF\n• Avoid with: AHA/BHA on same routine step\n\n**🌟 Vitamin C**\n• Brightening, collagen-boosting, antioxidant\n• Use in AM for UV protection\n• Look for stable forms: Ethyl Ascorbic Acid, Ascorbyl Glucoside\n\n**🌟 Hyaluronic Acid**\n• Holds 1000x its weight in water\n• Apply on DAMP skin!\n• Safe for all skin types\n\n**🌟 Salicylic Acid (BHA)**\n• Oil-soluble — dissolves inside pores\n• Best for acne, blackheads, oily skin\n• Use 2% concentration, PM\n\n**🌟 AHA (Glycolic/Lactic Acid)**\n• Water-soluble surface exfoliant\n• Brightens, smooths texture\n• Start with lactic acid (gentler), build up to glycolic\n\n**Combination Rules:**\n✅ Niacinamide + HA — great together\n✅ Vitamin C + SPF — morning power duo\n⚠️ Retinol + AHA/BHA — use on alternate nights\n❌ Vitamin C + Niacinamide at high concentrations — can reduce efficacy\n\nWant to know about a specific ingredient? 💜`;
+        const prods = await getRandomProducts(msg.includes('niacinamide') ? 'niacinamide' : msg.includes('retinol') ? 'retinol' : 'vitamin c', 3);
+        let reply = `Great question! Here's what science says about key skincare actives: 🔬\n\n`;
+        reply += `**Niacinamide (B3):** Controls oil, minimizes pores, fades spots. Safe AM+PM. Best at 5-10%.\n\n`;
+        reply += `**Retinol/Retinal:** Anti-aging gold standard. Start 0.2%, PM only. ALWAYS use SPF next day.\n\n`;
+        reply += `**Vitamin C:** Brightening + antioxidant. Use AM before SPF. Look for Ethyl Ascorbic Acid (stable).\n\n`;
+        reply += `**Hyaluronic Acid:** 1000x its weight in water. Apply on DAMP skin or it backfires!\n\n`;
+        reply += `**Salicylic Acid (BHA):** Oil-soluble, cleans INSIDE pores. Best for acne/blackheads.\n\n`;
+        reply += `**Safe combos:** ✅ Niacinamide + HA, ✅ Vit C + SPF\n**Caution:** ⚠️ Retinol + AHA/BHA (alternate nights)\n\n`;
+        reply += `**Products with these ingredients:**\n`;
+        prods.forEach(p => { reply += `• **${p.Brand_name} ${p.Product_name}** — ₹${p.Price}\n`; });
+        reply += `\nAsk me about any specific ingredient! 💜`;
+        return reply;
     }
 
-    // Default — comprehensive greeting
-    return `Hello ${user.Cust_name}! 💜 I'm your Luminar AI Skincare Assistant — think of me as your personal skincare expert!\n\nI can provide **detailed, personalized advice** on:\n\n🧴 **Product Recommendations** — matched to your ${skinType} skin type\n📋 **Complete Skincare Routines** — step-by-step AM and PM\n🔬 **Ingredient Deep-Dives** — what works, what to avoid, and why\n💡 **Skin Concern Solutions** — acne, dark spots, aging, sensitivity\n👩‍⚕️ **Detailed Guidance** — not just lists, but WHY and HOW things work\n📸 **AI Skin Analysis** — upload a photo for condition detection\n🏋️ **Lifestyle Tips** — diet, sleep, and habits that affect skin\n\n**Try asking me something like:**\n• "I have hyperpigmentation that's getting worse, what should I do?"\n• "Create a budget skincare routine for my oily skin"\n• "What ingredients should I avoid for sensitive skin?"\n• "Why is my acne not going away despite using products?"\n\nWhat would you like to know? ✨`;
+    // Budget
+    if (msg.includes('budget') || msg.includes('cheap') || msg.includes('affordable') || msg.includes('under')) {
+        const [budgetProds] = await db.query(`
+            SELECT p.Product_name, p.Price, b.Brand_name, p.Category FROM Product p
+            JOIN Brand b ON p.Brand_id = b.Brand_id
+            WHERE p.Price <= 500 AND p.P_Skin_type IN (?, 'All')
+            ORDER BY RANDOM() LIMIT 6
+        `, [skinType]);
+        let reply = `Great skincare doesn't have to be expensive! Here are amazing products under ₹500 for your **${skinType}** skin: 💰\n\n`;
+        budgetProds.forEach(p => {
+            reply += `• **${p.Brand_name} ${p.Product_name}** (${p.Category}) — **₹${p.Price}**\n`;
+        });
+        reply += `\n**Budget routine tip:** Cleanser + Moisturizer + Sunscreen is all you need to start! You can build from there. 💜`;
+        return reply;
+    }
+
+    // Hi/Hello/Thanks
+    if (msg.match(/^(hi|hello|hey|thanks|thank you|thx|ok|okay|cool|great|nice|good)/)) {
+        const greetings = [
+            `Hey ${user.Cust_name}! 😊 What skincare question can I help with today? Ask me about routines, ingredients, specific concerns, or product recommendations!`,
+            `Hello ${user.Cust_name}! 💜 I'm here to help with any skincare question. Try asking about your specific skin concerns, product recommendations, or ingredient advice!`,
+            `Hi there, ${user.Cust_name}! ✨ What's on your mind? I can help with acne, dark spots, routines, anti-aging, product picks, and much more!`,
+            `Welcome back, ${user.Cust_name}! 🌟 Ask me anything — whether it's about building a routine, understanding ingredients, or finding the right products for your ${skinType} skin!`
+        ];
+        return pickRandom(greetings, 1)[0];
+    }
+
+    // Default — dynamic greeting with product suggestions
+    const randomProds = pickRandom(products, 3);
+    const defaultVariants = [
+        `I'd love to help you, ${user.Cust_name}! 💜 Based on your **${skinType}** skin, here are some things I can help with:\n\n🧴 **Product Picks:** ${randomProds.map(p => p.Brand_name + ' ' + p.Product_name).join(', ')}\n📋 **Custom Routines** — morning AND night\n🔬 **Ingredient Science** — what works and what to avoid\n💡 **Concern Solutions** — acne, dark spots, aging, sensitivity\n\nTry asking: _"What's the best routine for my ${skinType} skin?"_ or _"How do I fade dark spots?"_ ✨`,
+
+        `Hey ${user.Cust_name}! ✨ I noticed you have **${skinType}** skin. Here's what I can do for you:\n\n• Recommend products from our catalog of 155+ items\n• Build a personalized AM/PM routine\n• Explain ingredient science in simple terms\n• Help troubleshoot skin problems\n\n**Quick picks for you:**\n${randomProds.map(p => `• ${p.Brand_name} ${p.Product_name} — ₹${p.Price}`).join('\n')}\n\nWhat would you like to know? 💜`,
+
+        `Hello ${user.Cust_name}! 🌟 I'm your personal skincare advisor. With your **${skinType}** skin type, I can help you:\n\n✅ Find the perfect cleanser, serum, and moisturizer\n✅ Build a science-backed routine\n✅ Understand which ingredients to use and avoid\n✅ Troubleshoot any skin concerns\n\nJust ask a question like _"I have acne that won't go away"_ or _"Suggest a budget routine"_ and I'll give detailed, personalized advice! 💜`
+    ];
+    return pickRandom(defaultVariants, 1)[0];
 }
 
 // Generate routine helper

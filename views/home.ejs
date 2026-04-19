@@ -17,7 +17,7 @@
         <div class="hero-actions">
             <% if (user) { %>
                 <a href="/quiz" class="btn btn-primary btn-lg"><i class="fas fa-magic"></i> Take Skin Quiz</a>
-                <a href="/products?recommended=true" class="btn btn-glass btn-lg"><i class="fas fa-sparkles"></i> My Recommendations</a>
+                <a href="/products?recommended=true" class="btn btn-glass btn-lg"><i class="fas fa-sparkles"></i> Recommended For You</a>
             <% } else { %>
                 <a href="/auth/register" class="btn btn-primary btn-lg"><i class="fas fa-user-plus"></i> Get Started Free</a>
                 <a href="/products" class="btn btn-glass btn-lg"><i class="fas fa-spa"></i> Explore Products</a>
@@ -25,11 +25,11 @@
         </div>
         <div class="hero-stats">
             <div class="hero-stat">
-                <span class="stat-number">120+</span>
+                <span class="stat-number">155+</span>
                 <span class="stat-label">Products</span>
             </div>
             <div class="hero-stat">
-                <span class="stat-number">15</span>
+                <span class="stat-number">20</span>
                 <span class="stat-label">Brands</span>
             </div>
             <div class="hero-stat">
@@ -69,7 +69,7 @@
                 <div class="step-number">03</div>
                 <div class="step-icon"><i class="fas fa-shopping-bag"></i></div>
                 <h3>Shop & Glow</h3>
-                <p>Browse 120+ curated products matched to your skin type. Order, track, and review — all in one place.</p>
+                <p>Browse 155+ curated products matched to your skin type. Order, track, and review — all in one place.</p>
             </div>
         </div>
     </div>
@@ -87,16 +87,7 @@
             <% featured.forEach(product => { %>
                 <a href="/products/<%= product.Product_id %>" class="product-card">
                     <div class="product-image">
-                        <% if (product.Image_url && product.Image_url.startsWith('http')) { %>
-                            <img src="<%= product.Image_url %>" alt="<%= product.Product_name %>" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-                            <div class="product-placeholder-img" style="display:none">
-                                <i class="fas fa-pump-soap"></i>
-                            </div>
-                        <% } else { %>
-                            <div class="product-placeholder-img">
-                                <i class="fas fa-pump-soap"></i>
-                            </div>
-                        <% } %>
+                        <img src="/product-image/<%= product.Product_id %>" alt="<%= product.Product_name %>" loading="lazy">
                         <span class="product-badge skin-<%= product.P_Skin_type.toLowerCase() %>"><%= product.P_Skin_type %></span>
                     </div>
                     <div class="product-info">

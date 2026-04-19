@@ -11,18 +11,7 @@
 
         <div class="product-detail">
             <div class="product-detail-image">
-                <% if (product.Image_url && product.Image_url.startsWith('http')) { %>
-                    <img src="<%= product.Image_url %>" alt="<%= product.Product_name %>" class="product-detail-img" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-                    <div class="product-detail-placeholder" style="display:none">
-                        <i class="fas fa-pump-soap"></i>
-                        <span><%= product.Category %></span>
-                    </div>
-                <% } else { %>
-                    <div class="product-detail-placeholder">
-                        <i class="fas fa-pump-soap"></i>
-                        <span><%= product.Category %></span>
-                    </div>
-                <% } %>
+                <img src="/product-image/<%= product.Product_id %>" alt="<%= product.Product_name %>" class="product-detail-img">
                 <span class="product-badge skin-<%= product.P_Skin_type.toLowerCase() %>"><%= product.P_Skin_type %> Skin</span>
             </div>
 
@@ -183,12 +172,7 @@
                     <% related.forEach(prod => { %>
                         <a href="/products/<%= prod.Product_id %>" class="product-card">
                             <div class="product-image">
-                                <% if (prod.Image_url && prod.Image_url.startsWith('http')) { %>
-                                    <img src="<%= prod.Image_url %>" alt="<%= prod.Product_name %>" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-                                    <div class="product-placeholder-img" style="display:none"><i class="fas fa-pump-soap"></i></div>
-                                <% } else { %>
-                                    <div class="product-placeholder-img"><i class="fas fa-pump-soap"></i></div>
-                                <% } %>
+                                <img src="/product-image/<%= prod.Product_id %>" alt="<%= prod.Product_name %>" loading="lazy">
                                 <span class="product-badge skin-<%= prod.P_Skin_type.toLowerCase() %>"><%= prod.P_Skin_type %></span>
                             </div>
                             <div class="product-info">

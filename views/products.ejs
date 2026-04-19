@@ -144,16 +144,7 @@
                         <% products.forEach(product => { %>
                             <a href="/products/<%= product.Product_id %>" class="product-card">
                                 <div class="product-image">
-                                    <% if (product.Image_url && product.Image_url.startsWith('http')) { %>
-                                        <img src="<%= product.Image_url %>" alt="<%= product.Product_name %>" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-                                        <div class="product-placeholder-img" style="display:none">
-                                            <i class="fas fa-pump-soap"></i>
-                                        </div>
-                                    <% } else { %>
-                                        <div class="product-placeholder-img">
-                                            <i class="fas fa-pump-soap"></i>
-                                        </div>
-                                    <% } %>
+                                    <img src="/product-image/<%= product.Product_id %>" alt="<%= product.Product_name %>" loading="lazy">
                                     <span class="product-badge skin-<%= product.P_Skin_type.toLowerCase() %>"><%= product.P_Skin_type %></span>
                                     <% if (user && user.C_Skin_type && (product.P_Skin_type === user.C_Skin_type || product.P_Skin_type === 'All')) { %>
                                         <span class="product-match-badge"><i class="fas fa-check-circle"></i> Matches You</span>
