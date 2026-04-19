@@ -71,15 +71,19 @@
                         </div>
                     </div>
 
-                    <!-- Brand -->
+                    <!-- Brand (Multi-select Checkboxes) -->
                     <div class="filter-group">
-                        <label>Brand</label>
-                        <select name="brand" class="filter-select">
-                            <option value="">All Brands</option>
+                        <label>Brands <small style="color:#c9a0dc;font-weight:normal">(select multiple)</small></label>
+                        <% const selectedBrands = Array.isArray(filters.brand) ? filters.brand.map(String) : (filters.brand ? [String(filters.brand)] : []); %>
+                        <div class="filter-options brand-filter-list">
                             <% brands.forEach(b => { %>
-                                <option value="<%= b.Brand_id %>" <%= filters.brand == b.Brand_id ? 'selected' : '' %>><%= b.Brand_name %></option>
+                                <label class="filter-option">
+                                    <input type="checkbox" name="brand" value="<%= b.Brand_id %>"
+                                        <%= selectedBrands.includes(String(b.Brand_id)) ? 'checked' : '' %>>
+                                    <%= b.Brand_name %>
+                                </label>
                             <% }) %>
-                        </select>
+                        </div>
                     </div>
 
                     <!-- Price Range -->
@@ -179,5 +183,24 @@
         </div>
     </div>
 </section>
+
+<style>
+.brand-filter-list {
+    max-height: 220px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.brand-filter-list::-webkit-scrollbar {
+    width: 4px;
+}
+.brand-filter-list::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.05);
+    border-radius: 4px;
+}
+.brand-filter-list::-webkit-scrollbar-thumb {
+    background: rgba(201,160,220,0.4);
+    border-radius: 4px;
+}
+</style>
 
 <%- include('partials/footer') %>

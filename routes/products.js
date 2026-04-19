@@ -32,13 +32,20 @@ router.get('/', async (req, res) => {
             conditions.push('(p.P_Skin_type = ? OR p.P_Skin_type = ?)');
             params.push(skin_type, 'All');
         }
+
+        // Multi-brand filter support (brand can be string or array)
         if (brand) {
-            conditions.push('p.Brand_id = ?');
-            params.push(brand);
+            const brandIds = (Array.isArray(brand) ? brand : [brand]).filter(b => b && b !== '');
+            if (brandIds.length > 0) {
+                const placeholders = brandIds.map(() => '?').join(',');
+                conditions.push(`p.Brand_id IN (${placeholders})`);
+                params.push(...brandIds);
+            }
         }
+
         if (search) {
-            conditions.push('(p.Product_name LIKE ? OR p.Description LIKE ? OR b.Brand_name LIKE ?)');
-            params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+            conditions.push('(p.Product_name LIKE ? OR p.Description LIKE ? OR b.Brand_name LIKE ? OR p.Category LIKE ? OR p.Ingredients LIKE ?)');
+            params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
         }
         // Price range filter
         if (price_range) {
@@ -67,7 +74,9 @@ router.get('/', async (req, res) => {
         }
 
         const [products] = await db.query(query, params);
-        const [categories] = await db.query('SELECT DISTINCT Category FROM Product ORDER BY Category');
+
+        // Exclude Body Care and Hair Care from category filter
+        const [categories] = await db.query("SELECT DISTINCT Category FROM Product WHERE Category NOT IN ('Body Care', 'Hair Care') ORDER BY Category");
         const [brands] = await db.query('SELECT * FROM Brand ORDER BY Brand_name');
         const skinTypes = ['Oily', 'Dry', 'Combination', 'Sensitive', 'Normal', 'All'];
 

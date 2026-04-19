@@ -228,14 +228,44 @@ function removeTyping(id) {
     if (el) el.remove();
 }
 
-// Routine Generator
+// Routine Generator — reset error on typing
+document.addEventListener('DOMContentLoaded', () => {
+    const concernsInput = document.getElementById('routineConcerns');
+    if (concernsInput) {
+        concernsInput.addEventListener('input', () => {
+            concernsInput.style.border = '';
+            concernsInput.placeholder = 'e.g., acne, dark spots, aging';
+        });
+    }
+});
+
 async function generateRoutine() {
+    const skinType = document.getElementById('routineSkinType').value;
+    const concerns = document.getElementById('routineConcerns').value.trim();
+
+    // Validation — concerns is required
+    if (!concerns) {
+        const concernsInput = document.getElementById('routineConcerns');
+        concernsInput.style.border = '2px solid #e74c3c';
+        concernsInput.placeholder = '⚠️ Please enter your skin concerns!';
+        concernsInput.value = '';
+        concernsInput.focus();
+
+        // Also show a brief toast-like message
+        const msg = document.createElement('div');
+        msg.style.cssText = 'color:#e74c3c;font-size:0.85rem;margin-top:4px;font-weight:500;';
+        msg.textContent = '⚠️ Please fill in your main skin concerns to generate a routine.';
+        msg.id = 'concerns-error';
+        const existing = document.getElementById('concerns-error');
+        if (existing) existing.remove();
+        concernsInput.parentElement.appendChild(msg);
+        setTimeout(() => { const el = document.getElementById('concerns-error'); if (el) el.remove(); }, 4000);
+        return;
+    }
+
     const btn = document.getElementById('generateRoutineBtn');
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
     btn.disabled = true;
-
-    const skinType = document.getElementById('routineSkinType').value;
-    const concerns = document.getElementById('routineConcerns').value;
 
     try {
         const res = await fetch('/assistant/routine', {

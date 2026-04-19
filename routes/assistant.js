@@ -103,7 +103,7 @@ router.post('/chat', isAuthenticated, async (req, res) => {
         const aiReply = await callAI([
             {
                 role: 'system',
-                content: `You are Luminar AI, a professional, empathetic, and highly knowledgeable skincare consultant for the Luminar skincare website. You provide detailed, thoughtful, and personalized skincare advice — similar to how a real dermatologist or skincare expert would respond.
+                content: `You are Luminar AI, a professional, empathetic, and highly knowledgeable skincare consultant for the Luminar skincare website. You respond like a real dermatologist or skincare expert who truly LISTENS to the patient.
 
 Customer Profile:
 - Name: ${user.Cust_name}
@@ -113,22 +113,38 @@ Customer Profile:
 Available Products in our catalog:
 ${productContext}
 
-Guidelines:
-- Be warm, professional, empathetic, and deeply knowledgeable about skincare
-- Give detailed, comprehensive answers — not just product lists
-- When someone describes a skin problem, explain what's happening, why it happens, what ingredients help, and then recommend products
-- For conditions like hyperpigmentation, acne, etc., explain the science behind treatments
-- Recommend specific products from our catalog when relevant (mention exact product names with prices)
-- Explain WHY certain products and ingredients suit their specific skin type and concerns
-- Provide actionable skincare routine steps and lifestyle tips
-- Discuss ingredients, their mechanisms, and benefits in detail
-- Address skin concerns with both product solutions AND lifestyle advice (diet, water intake, sleep, stress management)
-- If someone asks about a condition getting worse with a product, explain possible reasons (purging vs. reaction, wrong product for skin type, etc.)
-- Use ₹ for prices
-- Keep responses thorough but well-organized (use bullet points and bold for readability)
-- If asked about things unrelated to skincare, politely redirect
-- NEVER give actual medical diagnoses — recommend seeing a dermatologist for serious concerns
-- Be encouraging and supportive — skincare is a journey`
+CRITICAL RULES — Follow these STRICTLY:
+
+1. **LISTEN AND ANSWER THE ACTUAL QUESTION FIRST.** Read the user's message carefully. Understand what they are REALLY asking. Answer THEIR specific question before doing anything else.
+
+2. **If the user mentions a specific product causing problems** (e.g., "I was using Cetaphil cleanser and got acne"):
+   - FIRST acknowledge what they said
+   - Explain possible reasons WHY that product might have caused the issue (wrong for their skin type, ingredient sensitivity, purging vs reaction, comedogenic ingredients, wrong application method, etc.)
+   - Suggest whether they should stop or continue
+   - THEN, and ONLY THEN, suggest alternatives
+
+3. **DO NOT randomly recommend products.** Only recommend products when:
+   - The user explicitly asks for recommendations
+   - You have fully answered their question first and product suggestions are a natural next step
+   - The context naturally calls for it (e.g., they ask "what should I use instead")
+
+4. **Give DETAILED, THOUGHTFUL explanations.** Don't give generic answers. Tailor your response to their specific situation:
+   - If they describe symptoms, analyze those specific symptoms
+   - If they mention a specific routine or product, address that specifically
+   - Explain the science/reasoning behind your advice
+   - Include "why" not just "what"
+
+5. **Be conversational and empathetic.** The user should feel like they're talking to a caring expert, not reading a product catalog.
+
+6. **Format well for readability:** Use bold, bullet points, and organized sections.
+
+7. **Use ₹ for prices** when mentioning products.
+
+8. **If asked about things unrelated to skincare**, politely redirect.
+
+9. **For serious conditions**, recommend seeing a dermatologist without giving medical diagnoses.
+
+Remember: You are a skincare ADVISOR first, and a product recommender second. Answer the question, THEN recommend only if appropriate.`
             },
             { role: 'user', content: message }
         ]);
@@ -286,6 +302,61 @@ router.get('/tips', isAuthenticated, async (req, res) => {
 async function getEnhancedResponse(message, user, products) {
     const msg = message.toLowerCase();
     const skinType = user.C_Skin_type || 'Normal';
+
+    // ===== PRIORITY 1: User mentions a specific product causing problems =====
+    const productProblemPatterns = [
+        /(?:using|used|tried|started|applied|switched to)\s+(.+?)(?:\s+and\s+|\s+but\s+)(?:got|getting|having|caused|gave me|started|experiencing)\s+(.+)/i,
+        /(?:after|since)\s+(?:using|starting)\s+(.+?)[\s,]+(?:i\s+)?(?:got|getting|have|had|noticed|started|experiencing)\s+(.+)/i
+    ];
+    
+    let productMentioned = null;
+    let problemMentioned = null;
+    
+    for (const pattern of productProblemPatterns) {
+        const match = message.match(pattern);
+        if (match) {
+            productMentioned = match[1].trim();
+            problemMentioned = match[2].trim();
+            break;
+        }
+    }
+    
+    // Also check for simpler patterns like "cetaphil gave me acne"
+    if (!productMentioned) {
+        const brands = ['cetaphil', 'cerave', 'neutrogena', 'innisfree', 'minimalist', 'plum', 'mamaearth', 'biotique', 'laneige', 'cosrx', 'simple', 'ordinary', 'la roche', 'dot & key', "paula's choice", "derma co", "re'equil", 'pilgrim', 'aqualogica', 'fixderma'];
+        for (const brand of brands) {
+            if (msg.includes(brand)) {
+                productMentioned = brand;
+                if (msg.includes('acne') || msg.includes('pimple') || msg.includes('breakout')) problemMentioned = 'acne/breakouts';
+                else if (msg.includes('irritat') || msg.includes('burn') || msg.includes('sting') || msg.includes('red')) problemMentioned = 'irritation/redness';
+                else if (msg.includes('dry') || msg.includes('peel') || msg.includes('flak')) problemMentioned = 'dryness/peeling';
+                else if (msg.includes('oily') || msg.includes('greasy')) problemMentioned = 'excess oiliness';
+                else if (msg.includes('worse') || msg.includes('bad') || msg.includes('not working')) problemMentioned = 'worsening condition';
+                break;
+            }
+        }
+    }
+    
+    if (productMentioned && problemMentioned) {
+        let reply = `I hear you, ${user.Cust_name}. Let me address your concern about **${productMentioned}** specifically. 💜\n\n`;
+        reply += `**Why ${productMentioned} may have caused ${problemMentioned}:**\n\n`;
+        reply += `There are several possible reasons why this happened:\n\n`;
+        reply += `1. **Product-Skin Type Mismatch:** Your skin type is **${skinType}**. Not every well-known product suits every skin type. A product that works great for dry skin can clog pores on oily skin, and vice versa.\n\n`;
+        reply += `2. **Ingredient Sensitivity:** Some ingredients in the product (like certain surfactants, fragrances, or preservatives) might not agree with YOUR specific skin, even if the product is generally well-reviewed.\n\n`;
+        reply += `3. **Purging vs. Reaction:** If the product contains active ingredients (like AHAs, BHAs, retinol, or niacinamide), you might be experiencing **purging** — temporary breakouts that subside in 4-6 weeks. However, if it\'s been more than 6 weeks, it\'s likely a **reaction**, not purging.\n\n`;
+        reply += `4. **Wrong Usage:** Using too much product, applying it too often, or not following up with moisturizer/SPF can cause issues.\n\n`;
+        reply += `5. **Comedogenic Ingredients:** Some products contain ingredients that clog pores (comedogenic). Even "gentle" products can contain coconut derivatives or certain silicones that trigger breakouts.\n\n`;
+        
+        reply += `**What I Recommend You Do:**\n`;
+        reply += `• **Stop using ${productMentioned} immediately** if the reaction is severe (burning, excessive redness, swelling)\n`;
+        reply += `• **Simplify your routine** for 2 weeks: gentle cleanser + basic moisturizer + SPF only\n`;
+        reply += `• **Monitor your skin** — if it improves after stopping, the product was indeed the cause\n`;
+        reply += `• **Don't introduce multiple new products** at once — add one at a time, waiting 2 weeks between each\n\n`;
+        
+        reply += `**If you need an alternative**, I can suggest products from our catalog that are better suited for your **${skinType}** skin. Just let me know what type of product you need (cleanser, moisturizer, serum, etc.)! 💜`;
+        
+        return reply;
+    }
 
     // Hyperpigmentation / dark spots - DETAILED response
     if (msg.includes('hyperpigmentation') || msg.includes('dark spot') || msg.includes('pigment') || msg.includes('uneven') || msg.includes('melasma')) {
