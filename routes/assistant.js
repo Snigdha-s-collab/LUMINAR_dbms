@@ -320,19 +320,35 @@ router.post('/analyze-image', isAuthenticated, upload.single('skinImage'), async
             [user.Cust_id, imagePath, JSON.stringify(analysisResult), detectedConditions, recommendations]
         );
 
-        // Get recommended products
+        // Get recommended products matching detected conditions and skin type
         let productRecs = [];
+        const userSkinType = user.C_Skin_type || 'Normal';
         if (analysisResult.conditions && analysisResult.conditions.length > 0) {
-            const searchTerms = analysisResult.conditions.map(c => `%${c}%`);
-            const placeholders = searchTerms.map(() => 'p.Description LIKE ?').join(' OR ');
+            // Build search terms from detected conditions
+            const searchTerms = analysisResult.conditions.flatMap(c => {
+                const words = c.toLowerCase().split(/[\s,()]+/).filter(w => w.length > 2);
+                return words.map(w => `%${w}%`);
+            });
+            const placeholders = searchTerms.map(() => 'p.Description LIKE ? OR p.Product_name LIKE ?').join(' OR ');
+            const params = searchTerms.flatMap(t => [t, t]);
             const [prods] = await db.query(`
                 SELECT p.*, b.Brand_name FROM Product p
                 JOIN Brand b ON p.Brand_id = b.Brand_id
                 WHERE (${placeholders}) OR p.P_Skin_type IN (?, 'All')
                 GROUP BY p.Product_id
+                ORDER BY RANDOM()
                 LIMIT 6
-            `, [...searchTerms, user.C_Skin_type || 'Normal']);
+            `, [...params, userSkinType]);
             productRecs = prods;
+        }
+        if (productRecs.length < 3) {
+            const [fallback] = await db.query(`
+                SELECT p.*, b.Brand_name FROM Product p
+                JOIN Brand b ON p.Brand_id = b.Brand_id
+                WHERE p.P_Skin_type IN (?, 'All')
+                ORDER BY RANDOM() LIMIT 6
+            `, [userSkinType]);
+            productRecs = fallback;
         }
 
         res.json({
@@ -676,80 +692,211 @@ async function getEnhancedResponse(message, user, products, session) {
     return pickRandom(defaultVariants, 1)[0];
 }
 
-// Generate routine helper
+// Generate routine helper — fully personalized by skin type AND concerns
 function generateRoutine(skinType, concerns, products) {
-    const findProduct = (category) => {
-        const match = products.find(p => p.Category === category);
-        return match || null;
+    const concernsList = (concerns || '').toLowerCase().split(',').map(c => c.trim()).filter(Boolean);
+
+    // Smart product picker: filters by category, prioritizes concern-relevant products
+    function findBestProduct(category, preferKeywords) {
+        const catProducts = products.filter(p => p.Category === category);
+        if (catProducts.length === 0) return null;
+
+        // Try to match products whose name or description includes concern-relevant keywords
+        if (preferKeywords && preferKeywords.length > 0) {
+            for (const kw of preferKeywords) {
+                const match = catProducts.find(p =>
+                    (p.Product_name || '').toLowerCase().includes(kw) ||
+                    (p.Description || '').toLowerCase().includes(kw)
+                );
+                if (match) return match;
+            }
+        }
+
+        // Shuffle and pick a random product from the category to ensure variety
+        const shuffled = [...catProducts].sort(() => 0.5 - Math.random());
+        return shuffled[0];
+    }
+
+    // Concern-specific ingredient keywords to match products
+    const concernKeywords = {
+        'acne': ['salicylic', 'bha', 'benzoyl', 'tea tree', 'niacinamide', 'acne', 'pimple', 'oil-free', 'clay'],
+        'pimple': ['salicylic', 'bha', 'tea tree', 'acne', 'pimple', 'niacinamide'],
+        'dark spots': ['vitamin c', 'niacinamide', 'alpha arbutin', 'kojic', 'brightening', 'dark spot'],
+        'hyperpigmentation': ['vitamin c', 'niacinamide', 'alpha arbutin', 'kojic', 'brightening', 'pigment'],
+        'pigmentation': ['vitamin c', 'niacinamide', 'alpha arbutin', 'brightening', 'pigment'],
+        'uneven skin tone': ['vitamin c', 'aha', 'glycolic', 'brightening', 'glow', 'tone'],
+        'tanning': ['vitamin c', 'brightening', 'de-tan', 'tan', 'sunscreen', 'glow'],
+        'dryness': ['hyaluronic', 'ceramide', 'moisture', 'hydrating', 'squalane', 'cream'],
+        'oiliness': ['niacinamide', 'salicylic', 'gel', 'mattifying', 'oil-free', 'oil control'],
+        'aging': ['retinol', 'peptide', 'collagen', 'anti-aging', 'wrinkle', 'firming'],
+        'wrinkles': ['retinol', 'peptide', 'collagen', 'anti-aging', 'firming'],
+        'blackheads': ['bha', 'salicylic', 'charcoal', 'clay', 'pore', 'blackhead'],
+        'whiteheads': ['bha', 'salicylic', 'aha', 'exfoliat', 'whitehead'],
+        'redness': ['centella', 'cica', 'aloe', 'calming', 'soothing', 'sensitive'],
+        'sensitivity': ['centella', 'cica', 'aloe', 'calming', 'fragrance-free', 'gentle', 'sensitive'],
+        'dullness': ['vitamin c', 'aha', 'glycolic', 'brightening', 'glow', 'exfoliat'],
+        'dark circles': ['caffeine', 'vitamin c', 'eye', 'retinol', 'peptide', 'dark circle'],
+        'pores': ['niacinamide', 'bha', 'clay', 'pore', 'minimizing', 'toner'],
+        'dehydration': ['hyaluronic', 'ceramide', 'hydrating', 'moisture', 'aqua'],
+        'sun damage': ['vitamin c', 'niacinamide', 'sunscreen', 'spf', 'repair'],
+        'fine lines': ['retinol', 'peptide', 'hyaluronic', 'anti-aging', 'collagen']
     };
 
-    const cleanser = findProduct('Cleanser');
-    const toner = findProduct('Toner');
-    const serum = findProduct('Serum');
-    const moisturizer = findProduct('Moisturizer');
-    const sunscreen = findProduct('Sunscreen');
-    const treatment = findProduct('Treatment');
-    const eyeCare = findProduct('Eye Care');
-    const mask = findProduct('Mask');
+    // Get keywords for the user's concerns
+    let keywords = [];
+    for (const concern of concernsList) {
+        for (const [key, kws] of Object.entries(concernKeywords)) {
+            if (concern.includes(key) || key.includes(concern)) {
+                keywords.push(...kws);
+            }
+        }
+    }
+    // Also add skin-type-specific keywords
+    const skinTypeKeywords = {
+        'Oily': ['gel', 'oil-free', 'mattifying', 'salicylic', 'niacinamide', 'lightweight'],
+        'Dry': ['cream', 'hyaluronic', 'ceramide', 'nourishing', 'rich', 'moisture'],
+        'Sensitive': ['gentle', 'centella', 'cica', 'fragrance-free', 'calming', 'soothing'],
+        'Combination': ['balancing', 'gel-cream', 'niacinamide', 'hydrating', 'light'],
+        'Normal': ['hydrating', 'vitamin c', 'glow', 'nourishing']
+    };
+    keywords.push(...(skinTypeKeywords[skinType] || []));
+    keywords = [...new Set(keywords)]; // deduplicate
+
+    const cleanser = findBestProduct('Cleanser', keywords);
+    const toner = findBestProduct('Toner', keywords);
+    const serum = findBestProduct('Serum', keywords);
+    const moisturizer = findBestProduct('Moisturizer', keywords);
+    const sunscreen = findBestProduct('Sunscreen', keywords);
+    const treatment = findBestProduct('Treatment', keywords);
+    const eyeCare = findBestProduct('Eye Care', keywords);
+    const mask = findBestProduct('Mask', keywords);
+    const mist = findBestProduct('Mist', keywords);
+    const lipCare = findBestProduct('Lip Care', keywords);
+
+    // Build concern-specific instructions
+    const amCleanseMethod = skinType === 'Oily' ? 'Use a gel cleanser to remove overnight oil buildup'
+        : skinType === 'Dry' ? 'Use a cream/milk cleanser — lukewarm water only'
+        : skinType === 'Sensitive' ? 'Gently massage with fingertips, avoid rubbing'
+        : 'Massage onto damp face in circular motions for 30 seconds';
+
+    const pmCleanseMethod = skinType === 'Oily' ? 'Double cleanse: oil cleanser first, then gel cleanser'
+        : skinType === 'Dry' ? 'Double cleanse: balm first, then cream cleanser'
+        : skinType === 'Sensitive' ? 'Single gentle cleanse — skip double cleansing if irritated'
+        : 'Double cleanse if wearing sunscreen/makeup';
+
+    const serumHow = concernsList.some(c => c.includes('acne') || c.includes('pimple'))
+        ? 'Apply to acne-prone areas, avoid open wounds'
+        : concernsList.some(c => c.includes('dark') || c.includes('pigment') || c.includes('tan'))
+        ? 'Apply to hyperpigmented areas and entire face for even tone'
+        : concernsList.some(c => c.includes('aging') || c.includes('wrinkle') || c.includes('fine'))
+        ? 'Apply to fine lines, crow\'s feet, and forehead — pat gently'
+        : 'Apply drops to face and press gently into skin';
 
     const morning = [];
     const evening = [];
     let totalCost = 0;
 
     if (cleanser) {
-        morning.push({ step: 1, category: 'Cleanser', product: cleanser.Product_name, brand: cleanser.Brand_name, price: cleanser.Price, how: 'Massage onto damp face for 30 seconds, rinse with lukewarm water', amount: 'Coin-sized amount', wait_time: 'None' });
-        evening.push({ step: 1, category: 'Cleanser', product: cleanser.Product_name, brand: cleanser.Brand_name, price: cleanser.Price, how: 'Double cleanse — first with oil/balm, then this cleanser', amount: 'Coin-sized amount', wait_time: 'None' });
+        morning.push({ step: 1, category: 'Cleanser', product: cleanser.Product_name, brand: cleanser.Brand_name, price: cleanser.Price, how: amCleanseMethod, amount: 'Coin-sized amount', wait_time: 'None' });
+        evening.push({ step: 1, category: 'Cleanser', product: cleanser.Product_name, brand: cleanser.Brand_name, price: cleanser.Price, how: pmCleanseMethod, amount: 'Coin-sized amount', wait_time: 'None' });
         totalCost += cleanser.Price;
     }
     if (toner) {
-        morning.push({ step: 2, category: 'Toner', product: toner.Product_name, brand: toner.Brand_name, price: toner.Price, how: 'Pour onto hands or cotton pad, pat gently into skin', amount: '3-4 drops or enough to soak cotton pad', wait_time: '30 seconds' });
-        evening.push({ step: 2, category: 'Toner', product: toner.Product_name, brand: toner.Brand_name, price: toner.Price, how: 'Apply to cotton pad and sweep across face', amount: 'Enough to soak cotton pad', wait_time: '30 seconds' });
+        const tonerHow = skinType === 'Oily' ? 'Apply with cotton pad to T-zone and oily areas' : 'Pour onto hands and pat into skin — no rubbing';
+        morning.push({ step: 2, category: 'Toner', product: toner.Product_name, brand: toner.Brand_name, price: toner.Price, how: tonerHow, amount: '3-4 drops', wait_time: '30 seconds' });
+        evening.push({ step: 2, category: 'Toner', product: toner.Product_name, brand: toner.Brand_name, price: toner.Price, how: tonerHow, amount: '3-4 drops', wait_time: '30 seconds' });
         totalCost += toner.Price;
     }
     if (serum) {
-        morning.push({ step: 3, category: 'Serum', product: serum.Product_name, brand: serum.Brand_name, price: serum.Price, how: 'Apply drops to face and gently press into skin', amount: '3-4 drops', wait_time: '1-2 minutes' });
+        morning.push({ step: 3, category: 'Serum', product: serum.Product_name, brand: serum.Brand_name, price: serum.Price, how: serumHow, amount: '3-4 drops', wait_time: '1-2 minutes' });
         totalCost += serum.Price;
     }
     if (treatment) {
-        evening.push({ step: 3, category: 'Treatment', product: treatment.Product_name, brand: treatment.Brand_name, price: treatment.Price, how: 'Apply to targeted areas or full face', amount: 'Pea-sized amount', wait_time: '1-2 minutes' });
+        const treatHow = concernsList.some(c => c.includes('acne')) ? 'Apply as spot treatment on active breakouts only'
+            : concernsList.some(c => c.includes('dark') || c.includes('pigment')) ? 'Apply to dark spots and patches before moisturizer'
+            : 'Apply to targeted areas or full face as needed';
+        evening.push({ step: 3, category: 'Treatment', product: treatment.Product_name, brand: treatment.Brand_name, price: treatment.Price, how: treatHow, amount: 'Pea-sized amount', wait_time: '2 minutes' });
         totalCost += treatment.Price;
     }
     if (eyeCare) {
-        morning.push({ step: 4, category: 'Eye Care', product: eyeCare.Product_name, brand: eyeCare.Brand_name, price: eyeCare.Price, how: 'Dot around eye area and pat gently with ring finger', amount: 'Rice grain sized', wait_time: '30 seconds' });
-        evening.push({ step: 4, category: 'Eye Care', product: eyeCare.Product_name, brand: eyeCare.Brand_name, price: eyeCare.Price, how: 'Dot around eye area and pat gently', amount: 'Rice grain sized', wait_time: '30 seconds' });
+        morning.push({ step: 4, category: 'Eye Care', product: eyeCare.Product_name, brand: eyeCare.Brand_name, price: eyeCare.Price, how: 'Dot around eye area, pat gently with ring finger', amount: 'Rice grain sized', wait_time: '30 seconds' });
+        evening.push({ step: 4, category: 'Eye Care', product: eyeCare.Product_name, brand: eyeCare.Brand_name, price: eyeCare.Price, how: 'Dot and pat under eyes — never pull or rub', amount: 'Rice grain sized', wait_time: '30 seconds' });
         totalCost += eyeCare.Price;
     }
     if (moisturizer) {
-        morning.push({ step: 5, category: 'Moisturizer', product: moisturizer.Product_name, brand: moisturizer.Brand_name, price: moisturizer.Price, how: 'Apply evenly to face and neck, massage gently', amount: 'Pea-sized amount', wait_time: '1-2 minutes before SPF' });
-        evening.push({ step: 5, category: 'Moisturizer', product: moisturizer.Product_name, brand: moisturizer.Brand_name, price: moisturizer.Price, how: 'Apply generously as last step', amount: 'Generous amount', wait_time: 'None — go to sleep!' });
+        const moistHow = skinType === 'Oily' ? 'Apply lightweight gel moisturizer — focus on dry patches' : 'Apply generously, massage upward in circular motions';
+        morning.push({ step: 5, category: 'Moisturizer', product: moisturizer.Product_name, brand: moisturizer.Brand_name, price: moisturizer.Price, how: moistHow, amount: skinType === 'Oily' ? 'Small pea-sized' : 'Generous amount', wait_time: '1-2 minutes before SPF' });
+        evening.push({ step: 5, category: 'Moisturizer', product: moisturizer.Product_name, brand: moisturizer.Brand_name, price: moisturizer.Price, how: 'Apply as last step — lock in all previous products', amount: 'Generous amount', wait_time: 'None — go to sleep!' });
         totalCost += moisturizer.Price;
     }
     if (sunscreen) {
-        morning.push({ step: 6, category: 'Sunscreen', product: sunscreen.Product_name, brand: sunscreen.Brand_name, price: sunscreen.Price, how: 'Apply generously as LAST step of AM routine', amount: '2-3 finger lengths', wait_time: '15 minutes before going out' });
+        morning.push({ step: 6, category: 'Sunscreen', product: sunscreen.Product_name, brand: sunscreen.Brand_name, price: sunscreen.Price, how: 'Apply generously as LAST AM step. Reapply every 2-3 hours if outdoors', amount: '2-3 finger lengths', wait_time: '15 minutes before sun exposure' });
         totalCost += sunscreen.Price;
+    }
+    if (lipCare) {
+        morning.push({ step: 7, category: 'Lip Care', product: lipCare.Product_name, brand: lipCare.Brand_name, price: lipCare.Price, how: 'Apply to lips after moisturizer', amount: 'Thin layer', wait_time: 'None' });
+        totalCost += lipCare.Price;
     }
 
     const weekly = [];
     if (mask) {
-        weekly.push({ treatment: mask.Product_name, frequency: '1-2x per week', product: mask.Product_name, brand: mask.Brand_name });
+        const maskFreq = skinType === 'Sensitive' ? '1x per week max' : '2-3x per week';
+        weekly.push({ treatment: mask.Product_name, frequency: maskFreq, product: mask.Product_name, brand: mask.Brand_name });
     }
 
-    const avoid = [];
-    if (skinType === 'Oily') avoid.push('Heavy cream-based products', 'Coconut oil on face', 'Over-washing face (max 2x daily)');
-    else if (skinType === 'Dry') avoid.push('Foaming/gel cleansers', 'Alcohol-based toners', 'Hot water on face');
-    else if (skinType === 'Sensitive') avoid.push('Fragrance/perfume in products', 'Essential oils on face', 'Physical scrubs');
-    else avoid.push('Using too many actives at once', 'Skipping sunscreen', 'Sleeping with makeup on');
+    // Concern-specific avoid lists
+    const avoidMap = {
+        'Oily': ['Heavy oil-based creams & balms', 'Coconut oil on face (comedogenic)', 'Over-washing face (max 2x daily)', 'Alcohol-based toners that strip oils', 'Skipping moisturizer (makes oiliness worse!)'],
+        'Dry': ['Foaming/gel cleansers (too stripping)', 'Alcohol-based toners', 'Hot water on face (use lukewarm)', 'Clay masks more than 1x/week', 'Retinol without proper moisturizing'],
+        'Sensitive': ['Fragrance/parfum in ANY product', 'Essential oils (lavender, tea tree)', 'Physical scrubs & harsh exfoliants', 'AHA/BHA on irritated skin', 'Introducing multiple new products at once'],
+        'Combination': ['Heavy creams on T-zone', 'Over-exfoliating (max 2x/week)', 'Same products for whole face', 'Alcohol-based products on dry areas', 'Skipping moisturizer on oily zones'],
+        'Normal': ['Using too many actives at once', 'Skipping sunscreen', 'Sleeping with makeup on', 'Over-exfoliating', 'Picking at skin']
+    };
+    const concernAvoid = {
+        'acne': ['Touching/picking at pimples', 'Heavy makeup over breakouts', 'Dairy and high-sugar foods (triggers)', 'Dirty pillowcases & phone screens'],
+        'dark spots': ['Sun exposure without SPF 50+', 'Picking at scabs/marks', 'Lemon juice on face (too acidic)', 'Skipping vitamin C in morning'],
+        'tanning': ['Sun without SPF 50+ reapplied every 2h', 'Using bleach/harsh chemicals', 'Skipping antioxidant serums'],
+        'aging': ['Rubbing eyes and pulling skin', 'Sleeping on face (causes wrinkles)', 'Neglecting neck and décolletage', 'Skipping retinol/peptides at night'],
+        'dryness': ['Long hot showers', 'Foaming cleansers', 'Not moisturizing within 60s of washing'],
+        'sensitivity': ['Trying multiple new products at once', 'Products with alcohol or fragrance', 'Hot water and steam on face']
+    };
 
-    const tips = [
-        'Drink 2-3 liters of water daily',
-        'Sleep 7-8 hours for skin repair',
-        'Change pillowcases every 3 days',
-        'Never skip sunscreen, even indoors',
-        'Patch test new products behind your ear'
-    ];
+    let avoid = [...(avoidMap[skinType] || avoidMap['Normal'])];
+    for (const concern of concernsList) {
+        for (const [key, items] of Object.entries(concernAvoid)) {
+            if (concern.includes(key)) { avoid.push(...items); break; }
+        }
+    }
+    avoid = [...new Set(avoid)].slice(0, 6);
+
+    // Concern-specific pro tips
+    const tipsMap = {
+        'Oily': ['Blotting paper > washing — blot excess oil midday', 'Niacinamide 10% regulates sebum production', 'Use gel/water-based products over creams', 'Salicylic acid 2% unclogs pores without drying'],
+        'Dry': ['Apply moisturizer to DAMP skin for 3x absorption', 'Hyaluronic acid draws moisture — pair with moisturizer', 'Ceramic-based creams repair the skin barrier', 'Use a humidifier in AC environments'],
+        'Sensitive': ['Patch test EVERYTHING behind your ear first', 'Max 4-5 products in your routine', 'Centella/Cica is your best friend ingredient', 'Introduce one product at a time (wait 2 weeks)'],
+        'Combination': ['Use different products on T-zone vs. cheeks', 'Gel moisturizer on T-zone, cream on cheeks', 'Multi-masking: clay on nose, hydrating on cheeks'],
+        'Normal': ['Maintain what works — don\'t fix what isn\'t broken', 'Focus on prevention: SPF + antioxidants', 'Exfoliate 1-2x/week for extra glow']
+    };
+    const concernTips = {
+        'acne': ['Change pillowcases every 2-3 days', 'Keep phone screen clean — bacteria causes breakouts', 'Ice acne for 1 min to reduce inflammation', 'Don\'t pop pimples — use pimple patches instead'],
+        'dark spots': ['Vitamin C in AM + Sunscreen = dark spot killer combo', 'Alpha Arbutin is gentler than hydroquinone', 'Results take 8-12 weeks — be patient!'],
+        'tanning': ['Reapply SPF every 2 hours outdoors', 'Vitamin C reverses sun damage over time', 'Wear a hat and sunglasses for extra protection'],
+        'aging': ['Retinol is the gold standard — start with 0.025%', 'Peptides boost collagen naturally', 'Sleep on a silk pillowcase to reduce wrinkles'],
+        'dryness': ['Layer products thin-to-thick for max hydration', 'Drink 2-3 liters of water daily', 'Avoid products with alcohol denat. at the top of ingredients'],
+        'sensitivity': ['Look for "Dermatologist Tested" labels', 'Oat-based products calm inflammation', 'Avoid hot water — lukewarm only']
+    };
+
+    let tips = [...(tipsMap[skinType] || tipsMap['Normal'])];
+    for (const concern of concernsList) {
+        for (const [key, items] of Object.entries(concernTips)) {
+            if (concern.includes(key)) { tips.push(...items); break; }
+        }
+    }
+    tips = [...new Set(tips)].slice(0, 6);
 
     return {
         skin_type: skinType,
+        concerns: concerns || 'General skincare',
         morning,
         evening,
         weekly,
@@ -759,33 +906,201 @@ function generateRoutine(skinType, concerns, products) {
     };
 }
 
-// Simulated skin analysis helper
+// Simulated skin analysis helper — varied, realistic detections
 function getSimulatedAnalysis(user) {
-    const conditions = [];
-    const concerns = (user.Skin_concerns || '').split(',').map(c => c.trim()).filter(Boolean);
+    const skinType = user.C_Skin_type || 'Normal';
+    const userConcerns = (user.Skin_concerns || '').split(',').map(c => c.trim()).filter(Boolean);
 
-    if (concerns.length > 0) {
-        conditions.push(...concerns);
-    } else {
-        const possibleConditions = ['Mild Acne', 'Slight Hyperpigmentation', 'Minor Dryness', 'Slight Redness'];
-        conditions.push(possibleConditions[Math.floor(Math.random() * possibleConditions.length)]);
+    // All possible detectable conditions with probability weights per skin type
+    const conditionPools = {
+        'Oily': [
+            { name: 'Mild Acne', weight: 35 },
+            { name: 'Open Pores', weight: 30 },
+            { name: 'Blackheads', weight: 25 },
+            { name: 'Whiteheads', weight: 20 },
+            { name: 'Excess Sebum', weight: 30 },
+            { name: 'Uneven Skin Tone', weight: 15 },
+            { name: 'Tiny Bumps (Closed Comedones)', weight: 18 },
+            { name: 'Oily T-Zone', weight: 25 },
+            { name: 'Post-Acne Marks', weight: 15 },
+            { name: 'Slight Redness', weight: 10 }
+        ],
+        'Dry': [
+            { name: 'Dehydration Lines', weight: 35 },
+            { name: 'Flaky Patches', weight: 30 },
+            { name: 'Dull Complexion', weight: 25 },
+            { name: 'Minor Redness', weight: 20 },
+            { name: 'Rough Texture', weight: 28 },
+            { name: 'Fine Lines (Dehydration)', weight: 22 },
+            { name: 'Tightness', weight: 18 },
+            { name: 'Slight Pigmentation', weight: 12 },
+            { name: 'Uneven Skin Tone', weight: 15 },
+            { name: 'Sensitivity Patches', weight: 14 }
+        ],
+        'Combination': [
+            { name: 'Oily T-Zone', weight: 30 },
+            { name: 'Dry Cheeks', weight: 25 },
+            { name: 'Open Pores (Nose)', weight: 28 },
+            { name: 'Blackheads', weight: 20 },
+            { name: 'Uneven Texture', weight: 22 },
+            { name: 'Mild Acne', weight: 15 },
+            { name: 'Slight Pigmentation', weight: 18 },
+            { name: 'Dehydration', weight: 16 },
+            { name: 'Tiny Bumps', weight: 12 },
+            { name: 'Dull Areas', weight: 14 }
+        ],
+        'Sensitive': [
+            { name: 'Redness', weight: 35 },
+            { name: 'Irritation Patches', weight: 28 },
+            { name: 'Broken Capillaries', weight: 20 },
+            { name: 'Flushing', weight: 25 },
+            { name: 'Reactive Skin', weight: 30 },
+            { name: 'Dry Patches', weight: 18 },
+            { name: 'Slight Eczema', weight: 12 },
+            { name: 'Rough Texture', weight: 15 },
+            { name: 'Uneven Skin Tone', weight: 14 },
+            { name: 'Sensitivity to Touch', weight: 22 }
+        ],
+        'Normal': [
+            { name: 'Mild Dullness', weight: 25 },
+            { name: 'Slight Uneven Tone', weight: 20 },
+            { name: 'Minor Pores', weight: 18 },
+            { name: 'Slight Tanning', weight: 22 },
+            { name: 'Minor Dark Circles', weight: 15 },
+            { name: 'Fine Lines', weight: 12 },
+            { name: 'Slight Dehydration', weight: 14 },
+            { name: 'Tiny Bumps', weight: 10 },
+            { name: 'Minor Pigmentation', weight: 16 },
+            { name: 'Slight Texture', weight: 13 }
+        ]
+    };
+
+    const pool = conditionPools[skinType] || conditionPools['Normal'];
+
+    // Pick 2-4 random conditions weighted by probability
+    const conditions = [];
+    const shuffled = [...pool].sort(() => 0.5 - Math.random());
+    const count = 2 + Math.floor(Math.random() * 3); // 2-4 conditions
+    for (const item of shuffled) {
+        if (conditions.length >= count) break;
+        if (Math.random() * 100 < item.weight) {
+            conditions.push(item.name);
+        }
     }
+    // Ensure at least 2
+    while (conditions.length < 2) {
+        const random = shuffled[Math.floor(Math.random() * shuffled.length)];
+        if (!conditions.includes(random.name)) conditions.push(random.name);
+    }
+
+    // If user has quiz concerns, include 1-2 of those
+    if (userConcerns.length > 0) {
+        const mapped = userConcerns.slice(0, 2).map(c => {
+            if (c.toLowerCase().includes('acne')) return 'Mild Acne';
+            if (c.toLowerCase().includes('pigment')) return 'Hyperpigmentation';
+            if (c.toLowerCase().includes('dark spot')) return 'Dark Spots';
+            if (c.toLowerCase().includes('tan')) return 'Sun Tanning';
+            if (c.toLowerCase().includes('aging')) return 'Early Signs of Aging';
+            if (c.toLowerCase().includes('dull')) return 'Dull Complexion';
+            if (c.toLowerCase().includes('pore')) return 'Enlarged Pores';
+            if (c.toLowerCase().includes('dry')) return 'Dehydration';
+            if (c.toLowerCase().includes('wrinkle')) return 'Fine Lines';
+            if (c.toLowerCase().includes('uneven')) return 'Uneven Skin Tone';
+            return c;
+        });
+        for (const m of mapped) {
+            if (!conditions.includes(m)) {
+                conditions[Math.floor(Math.random() * conditions.length)] = m;
+            }
+        }
+    }
+
+    // Health score varies by number and severity of conditions
+    const baseScore = skinType === 'Normal' ? 80 : skinType === 'Sensitive' ? 60 : 65;
+    const healthScore = Math.min(95, Math.max(45, baseScore + Math.floor(Math.random() * 20) - conditions.length * 3));
+
+    const severity = healthScore >= 80 ? 'mild' : healthScore >= 65 ? 'moderate' : 'needs attention';
+
+    // Skin-type + condition specific recommendations
+    const recMap = {
+        'Oily': [
+            'Use a gentle gel/foam cleanser with Salicylic Acid (BHA)',
+            'Apply Niacinamide serum to control oil and minimize pores',
+            'Use oil-free, gel-based moisturizer',
+            'Apply matte-finish SPF 50+ sunscreen daily',
+            'Use Clay mask 1-2x per week to deep clean pores',
+            'Exfoliate with BHA 2-3 times per week'
+        ],
+        'Dry': [
+            'Switch to a cream/milk cleanser — avoid foaming formulas',
+            'Apply Hyaluronic Acid serum on damp skin for deep hydration',
+            'Use rich, ceramide-based moisturizer morning and night',
+            'Apply SPF 50+ with added moisture/ceramides',
+            'Use hydrating sheet masks 2-3x per week',
+            'Apply facial oil (rosehip/jojoba) at night for barrier repair'
+        ],
+        'Sensitive': [
+            'Use fragrance-free, pH-balanced gentle cleanser',
+            'Apply Centella (Cica) serum to calm inflammation',
+            'Use barrier-repair moisturizer with ceramides',
+            'Apply mineral SPF 50+ (zinc oxide based)',
+            'Avoid any products with alcohol, fragrance, or essential oils',
+            'Introduce new products one at a time — patch test first'
+        ],
+        'Combination': [
+            'Use a balanced gel-cream cleanser',
+            'Apply different products on T-zone vs. cheeks (multi-zone care)',
+            'Use Niacinamide serum all-over to balance oil and hydration',
+            'Apply gel moisturizer on T-zone, cream on dry areas',
+            'Use lightweight SPF 50+ gel sunscreen',
+            'Use clay mask on nose/forehead, hydrating mask on cheeks'
+        ],
+        'Normal': [
+            'Maintain your gentle cleanser — don\'t over-complicate',
+            'Use Vitamin C serum in the morning for glow and protection',
+            'Apply a lightweight moisturizer with antioxidants',
+            'Use SPF 50+ daily to prevent premature aging',
+            'Exfoliate with AHA 1-2x per week for extra radiance',
+            'Apply a hydrating mask weekly for maintenance'
+        ]
+    };
+
+    const recommendations = recMap[skinType] || recMap['Normal'];
+
+    // Analysis text personalized to detected conditions
+    const conditionTexts = conditions.slice(0, 3).join(', ');
+    const analysis = `Based on our AI analysis, we detected **${conditionTexts}**. ` +
+        (severity === 'mild'
+            ? `Your skin appears generally healthy with minor areas to address. A consistent skincare routine will help maintain and improve your complexion.`
+            : severity === 'moderate'
+            ? `Your skin has some areas that need targeted care. We recommend focusing on these concerns with the right products and a consistent routine.`
+            : `Your skin needs extra attention. We strongly recommend a dedicated skincare routine with products specifically designed for your ${skinType} skin type and these conditions.`);
 
     return {
         conditions,
-        healthScore: Math.floor(Math.random() * 25) + 65,
-        severity: 'mild',
-        analysis: `Based on our analysis, we detected: ${conditions.join(', ')}. Your skin appears generally healthy with some areas that could benefit from targeted care. We recommend a consistent skincare routine with products suited for your ${user.C_Skin_type || 'Normal'} skin type.`,
-        recommendations: [
-            'Use a gentle cleanser twice daily',
-            'Apply sunscreen SPF 50+ every morning',
-            'Include a targeted serum for your concerns',
-            'Moisturize morning and night',
-            'Exfoliate 1-2 times per week'
-        ],
+        healthScore,
+        severity,
+        analysis,
+        recommendations,
         routine: {
-            morning: ['Gentle Cleanser', 'Vitamin C Serum', 'Moisturizer', 'Sunscreen SPF 50+'],
-            evening: ['Double Cleanse', 'Treatment Serum', 'Eye Cream', 'Night Moisturizer']
+            morning: skinType === 'Oily'
+                ? ['Gel Cleanser', 'BHA Toner', 'Niacinamide Serum', 'Oil-Free Moisturizer', 'Matte SPF 50+']
+                : skinType === 'Dry'
+                ? ['Cream Cleanser', 'Hydrating Toner', 'Hyaluronic Acid Serum', 'Rich Moisturizer', 'Hydrating SPF 50+']
+                : skinType === 'Sensitive'
+                ? ['Gentle Micellar Cleanser', 'Cica/Centella Toner', 'Calming Serum', 'Barrier Cream', 'Mineral SPF 50+']
+                : skinType === 'Combination'
+                ? ['Gel-Cream Cleanser', 'Balancing Toner', 'Niacinamide Serum', 'Gel Moisturizer', 'Lightweight SPF 50+']
+                : ['Gentle Cleanser', 'Vitamin C Serum', 'Moisturizer', 'Sunscreen SPF 50+'],
+            evening: skinType === 'Oily'
+                ? ['Oil Cleanser', 'Gel Cleanser', 'BHA Treatment (2-3x/week)', 'Lightweight Night Moisturizer']
+                : skinType === 'Dry'
+                ? ['Balm Cleanser', 'Cream Cleanser', 'Retinol (2x/week)', 'Night Cream + Facial Oil']
+                : skinType === 'Sensitive'
+                ? ['Gentle Cleanser (single cleanse)', 'Cica Serum', 'Barrier Repair Night Cream']
+                : skinType === 'Combination'
+                ? ['Double Cleanse', 'AHA Treatment (2x/week)', 'Zone-Specific Moisturizer']
+                : ['Double Cleanse', 'Treatment Serum', 'Eye Cream', 'Night Moisturizer']
         }
     };
 }
