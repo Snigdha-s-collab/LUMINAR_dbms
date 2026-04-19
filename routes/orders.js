@@ -20,12 +20,19 @@ router.get('/checkout', isAuthenticated, async (req, res) => {
             return res.redirect('/cart');
         }
 
+        // Get current reward points
+        const [custRows] = await db.query('SELECT Reward_points FROM Customer WHERE Cust_id = ?', [req.session.user.Cust_id]);
+        const availablePoints = custRows[0]?.Reward_points || 0;
+
         const subtotal = items.reduce((sum, item) => sum + (item.Price * item.Quantity), 0);
         const shipping = subtotal > 999 ? 0 : 99;
         const tax = Math.round(subtotal * 0.18 * 100) / 100;
         const total = subtotal + shipping + tax;
 
-        res.render('checkout', { items, subtotal, shipping, tax, total });
+        // Max redeemable = min(available points, total) — 1 point = ₹1
+        const maxRedeemable = Math.min(availablePoints, Math.floor(total));
+
+        res.render('checkout', { items, subtotal, shipping, tax, total, availablePoints, maxRedeemable });
     } catch (err) {
         console.error('Checkout error:', err);
         res.redirect('/cart');
@@ -38,7 +45,7 @@ router.post('/create', isAuthenticated, async (req, res) => {
     try {
         await connection.beginTransaction();
         const userId = req.session.user.Cust_id;
-        const { address, payMethod, cardNumber, cardExpiry, cardCvv, upiId } = req.body;
+        const { address, payMethod, cardNumber, cardExpiry, cardCvv, upiId, useRewards, redeemPoints } = req.body;
 
         // Get cart items
         const [items] = await connection.query(`
@@ -56,7 +63,18 @@ router.post('/create', isAuthenticated, async (req, res) => {
         const subtotal = items.reduce((sum, item) => sum + (item.Price * item.Quantity), 0);
         const shipping = subtotal > 999 ? 0 : 99;
         const tax = Math.round(subtotal * 0.18 * 100) / 100;
-        const totalAmount = subtotal + shipping + tax;
+        let totalAmount = subtotal + shipping + tax;
+
+        // Handle reward point redemption
+        let pointsUsed = 0;
+        if (useRewards === 'on' && redeemPoints) {
+            const [custRows] = await connection.query('SELECT Reward_points FROM Customer WHERE Cust_id = ?', [userId]);
+            const availablePoints = custRows[0]?.Reward_points || 0;
+            pointsUsed = Math.min(parseInt(redeemPoints) || 0, availablePoints, Math.floor(totalAmount));
+            if (pointsUsed > 0) {
+                totalAmount = Math.max(0, totalAmount - pointsUsed);
+            }
+        }
 
         // Create Order
         const trackingNumber = 'LMR' + Date.now().toString(36).toUpperCase() + uuidv4().substring(0, 6).toUpperCase();
@@ -94,6 +112,21 @@ router.post('/create', isAuthenticated, async (req, res) => {
             );
             // Clear cart
             await connection.query('DELETE FROM Cart WHERE Cust_id = ?', [userId]);
+
+            // Deduct reward points if used
+            if (pointsUsed > 0) {
+                await connection.query(
+                    'UPDATE Customer SET Reward_points = Reward_points - ? WHERE Cust_id = ?',
+                    [pointsUsed, userId]
+                );
+                await connection.query(
+                    'INSERT INTO Reward_log (Cust_id, Points, Type, Description) VALUES (?, ?, ?, ?)',
+                    [userId, pointsUsed, 'spent', `Redeemed ${pointsUsed} points on Order #${orderId} (saved ₹${pointsUsed})`]
+                );
+                if (req.session.user) {
+                    req.session.user.Reward_points = Math.max(0, (req.session.user.Reward_points || 0) - pointsUsed);
+                }
+            }
 
             // Award reward points: 10 points per ₹100 spent
             const rewardPoints = Math.floor(subtotal / 100) * 10;

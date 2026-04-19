@@ -116,11 +116,45 @@
                         <div class="summary-row"><span>Subtotal</span><span>₹<%= subtotal.toLocaleString('en-IN') %></span></div>
                         <div class="summary-row"><span>Shipping</span><span><%= shipping === 0 ? '<span class="text-success">FREE</span>' : '₹' + shipping %></span></div>
                         <div class="summary-row"><span>Tax (GST 18%)</span><span>₹<%= tax.toLocaleString('en-IN') %></span></div>
+
+                        <% if (availablePoints > 0) { %>
+                        <!-- Reward Points Redemption -->
                         <div class="summary-divider"></div>
-                        <div class="summary-row total"><span>Total</span><span>₹<%= total.toLocaleString('en-IN') %></span></div>
+                        <div class="rewards-checkout-section" id="rewardsSection">
+                            <div class="rewards-toggle-row">
+                                <label class="rewards-toggle-label" for="useRewardsToggle">
+                                    <i class="fas fa-coins" style="color: #fbbf24;"></i>
+                                    <span>Use Reward Points</span>
+                                    <span class="rewards-available">(<%= availablePoints %> pts = ₹<%= availablePoints %>)</span>
+                                </label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="useRewardsToggle" name="useRewards" onchange="toggleRewards()">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="rewards-slider-area hidden" id="rewardsSliderArea">
+                                <div class="rewards-slider-row">
+                                    <input type="range" id="rewardsSlider" name="redeemPoints" 
+                                           min="0" max="<%= maxRedeemable %>" value="<%= maxRedeemable %>"
+                                           oninput="updateRedeemPoints(this.value)" class="rewards-range">
+                                </div>
+                                <div class="rewards-slider-info">
+                                    <span>Using: <strong id="redeemDisplay"><%= maxRedeemable %></strong> points</span>
+                                    <span class="text-success">You save: ₹<span id="saveDisplay"><%= maxRedeemable %></span></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="summary-row rewards-discount hidden" id="rewardsDiscountRow">
+                            <span><i class="fas fa-coins" style="color:#fbbf24;"></i> Rewards Discount</span>
+                            <span class="text-success" id="rewardsDiscountAmt">- ₹0</span>
+                        </div>
+                        <% } %>
+
+                        <div class="summary-divider"></div>
+                        <div class="summary-row total"><span>Total</span><span id="finalTotal">₹<%= total.toLocaleString('en-IN') %></span></div>
 
                         <button type="submit" class="btn btn-primary btn-full btn-lg" id="payBtn">
-                            <i class="fas fa-lock"></i> Pay ₹<%= total.toLocaleString('en-IN') %>
+                            <i class="fas fa-lock"></i> Pay <span id="payAmount">₹<%= total.toLocaleString('en-IN') %></span>
                         </button>
                     </div>
                 </div>
@@ -156,6 +190,43 @@ document.getElementById('checkoutForm').addEventListener('submit', function(e) {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing Payment...';
     btn.disabled = true;
 });
+
+// Rewards redemption
+const originalTotal = <%= total %>;
+
+function toggleRewards() {
+    const toggle = document.getElementById('useRewardsToggle');
+    const sliderArea = document.getElementById('rewardsSliderArea');
+    const discountRow = document.getElementById('rewardsDiscountRow');
+    
+    if (toggle && sliderArea) {
+        if (toggle.checked) {
+            sliderArea.classList.remove('hidden');
+            if (discountRow) discountRow.classList.remove('hidden');
+            const slider = document.getElementById('rewardsSlider');
+            updateRedeemPoints(slider.value);
+        } else {
+            sliderArea.classList.add('hidden');
+            if (discountRow) discountRow.classList.add('hidden');
+            updateTotal(0);
+        }
+    }
+}
+
+function updateRedeemPoints(val) {
+    val = parseInt(val) || 0;
+    document.getElementById('redeemDisplay').textContent = val;
+    document.getElementById('saveDisplay').textContent = val;
+    document.getElementById('rewardsDiscountAmt').textContent = '- ₹' + val;
+    updateTotal(val);
+}
+
+function updateTotal(discount) {
+    const newTotal = Math.max(0, originalTotal - discount);
+    const formatted = '₹' + newTotal.toLocaleString('en-IN');
+    document.getElementById('finalTotal').textContent = formatted;
+    document.getElementById('payAmount').textContent = formatted;
+}
 </script>
 
 <%- include('partials/footer') %>
