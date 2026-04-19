@@ -1,0 +1,347 @@
+<%- include('partials/header') %>
+
+<section class="rewards-section">
+    <div class="container">
+        <div class="rewards-header">
+            <div class="rewards-title-area">
+                <span class="section-badge">REWARDS</span>
+                <h1>Luminar Rewards</h1>
+                <p>Earn points, spin the wheel, and save on your skincare favorites!</p>
+            </div>
+            <div class="rewards-balance-card">
+                <div class="balance-icon"><i class="fas fa-coins"></i></div>
+                <div class="balance-info">
+                    <span class="balance-label">Your Balance</span>
+                    <span class="balance-amount" id="totalPoints"><%= rewardPoints %></span>
+                    <span class="balance-unit">Reward Points</span>
+                </div>
+                <div class="balance-value">= ₹<%= rewardPoints %></div>
+            </div>
+        </div>
+
+        <div class="rewards-layout">
+            <!-- Spin the Wheel -->
+            <div class="spin-panel">
+                <div class="spin-card">
+                    <h2><i class="fas fa-sync-alt"></i> Spin the Wheel</h2>
+                    <p class="spin-subtitle">Try your luck every 48 hours!</p>
+
+                    <div class="wheel-container" id="wheelContainer">
+                        <div class="wheel-pointer">▼</div>
+                        <canvas id="wheelCanvas" width="340" height="340"></canvas>
+                    </div>
+
+                    <% if (canSpin) { %>
+                        <button class="btn btn-primary btn-lg btn-full spin-btn" id="spinBtn" onclick="spinWheel()">
+                            <i class="fas fa-star"></i> SPIN NOW!
+                        </button>
+                    <% } else { %>
+                        <button class="btn btn-glass btn-lg btn-full spin-btn" disabled>
+                            <i class="fas fa-clock"></i> <span id="countdownText">Next spin available soon...</span>
+                        </button>
+                    <% } %>
+
+                    <div class="spin-result hidden" id="spinResult">
+                        <div class="result-icon" id="resultIcon"></div>
+                        <div class="result-text" id="resultText"></div>
+                        <div class="result-next" id="resultNext"></div>
+                    </div>
+
+                    <% if (!canSpin && nextSpinTime) { %>
+                        <div class="countdown-timer" id="countdownTimer">
+                            <p><i class="fas fa-hourglass-half"></i> Next spin in:</p>
+                            <div class="countdown-display" id="countdownDisplay">
+                                <div class="countdown-unit"><span id="cdHours">--</span><small>hours</small></div>
+                                <div class="countdown-sep">:</div>
+                                <div class="countdown-unit"><span id="cdMinutes">--</span><small>mins</small></div>
+                                <div class="countdown-sep">:</div>
+                                <div class="countdown-unit"><span id="cdSeconds">--</span><small>secs</small></div>
+                            </div>
+                        </div>
+                    <% } %>
+                </div>
+
+                <!-- How it works -->
+                <div class="rewards-info-card">
+                    <h3><i class="fas fa-info-circle"></i> How Rewards Work</h3>
+                    <div class="info-items">
+                        <div class="info-item">
+                            <div class="info-icon spin-icon"><i class="fas fa-sync-alt"></i></div>
+                            <div><strong>Spin the Wheel</strong><br>Every 48 hours, spin for free reward points (up to 18 points!)</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-icon shop-icon"><i class="fas fa-shopping-bag"></i></div>
+                            <div><strong>Shop & Earn</strong><br>Earn 10 points for every ₹100 spent on orders</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-icon redeem-icon"><i class="fas fa-gift"></i></div>
+                            <div><strong>Redeem Points</strong><br>1 point = ₹1. Use points at checkout to save!</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-icon expire-icon"><i class="fas fa-clock"></i></div>
+                            <div><strong>Points Expire</strong><br>Spin wheel points expire in 7 days. Use them wisely!</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reward History -->
+            <div class="history-panel">
+                <div class="history-card">
+                    <h3><i class="fas fa-history"></i> Reward History</h3>
+                    <% if (history.length === 0) { %>
+                        <div class="empty-state small">
+                            <i class="fas fa-coins"></i>
+                            <p>No reward activity yet. Spin the wheel or place an order to start earning!</p>
+                        </div>
+                    <% } else { %>
+                        <div class="reward-history-list">
+                            <% history.forEach(log => { %>
+                                <div class="history-item <%= log.Points > 0 ? (log.Type === 'spent' ? 'spent' : 'earned') : 'missed' %>">
+                                    <div class="history-icon">
+                                        <% if (log.Type === 'spin' && log.Points > 0) { %>
+                                            <i class="fas fa-sync-alt"></i>
+                                        <% } else if (log.Type === 'spin' && log.Points === 0) { %>
+                                            <i class="fas fa-times-circle"></i>
+                                        <% } else if (log.Type === 'order') { %>
+                                            <i class="fas fa-shopping-bag"></i>
+                                        <% } else if (log.Type === 'spent') { %>
+                                            <i class="fas fa-minus-circle"></i>
+                                        <% } else if (log.Type === 'expired') { %>
+                                            <i class="fas fa-clock"></i>
+                                        <% } else { %>
+                                            <i class="fas fa-coins"></i>
+                                        <% } %>
+                                    </div>
+                                    <div class="history-details">
+                                        <span class="history-desc"><%= log.Description %></span>
+                                        <span class="history-date"><%= new Date(log.Created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) %></span>
+                                        <% if (log.Expires_at) { %>
+                                            <span class="history-expiry"><i class="fas fa-clock"></i> Expires: <%= new Date(log.Expires_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) %></span>
+                                        <% } %>
+                                    </div>
+                                    <div class="history-points <%= log.Type === 'spent' ? 'negative' : (log.Points > 0 ? 'positive' : 'zero') %>">
+                                        <%= log.Type === 'spent' ? '-' : '+' %><%= Math.abs(log.Points) %>
+                                    </div>
+                                </div>
+                            <% }) %>
+                        </div>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+// Spin Wheel segments
+const segments = [
+    { label: '0', color: '#2a2a3e', points: 0 },
+    { label: '2', color: '#1a4a6e', points: 2 },
+    { label: '5', color: '#3d1a4d', points: 5 },
+    { label: '3', color: '#2d5a2d', points: 3 },
+    { label: '10', color: '#6e5a1a', points: 10 },
+    { label: '1', color: '#4d1a2e', points: 1 },
+    { label: '8', color: '#1a3d4d', points: 8 },
+    { label: '15', color: '#4d2e1a', points: 15 },
+    { label: '4', color: '#2e1a4d', points: 4 },
+    { label: '0', color: '#2a2a3e', points: 0 },
+    { label: '7', color: '#1a4d4d', points: 7 },
+    { label: '12', color: '#3d3d1a', points: 12 },
+    { label: '6', color: '#4d1a1a', points: 6 },
+    { label: '0', color: '#2a2a3e', points: 0 },
+    { label: '18', color: '#5a2d6e', points: 18 },
+    { label: '9', color: '#1a3a1a', points: 9 }
+];
+
+const canvas = document.getElementById('wheelCanvas');
+const ctx = canvas.getContext('2d');
+const centerX = canvas.width / 2;
+const centerY = canvas.height / 2;
+const radius = 160;
+let currentAngle = 0;
+let isSpinning = false;
+
+function drawWheel(angle = 0) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const arcSize = (2 * Math.PI) / segments.length;
+
+    segments.forEach((seg, i) => {
+        const startAngle = angle + i * arcSize;
+        const endAngle = startAngle + arcSize;
+
+        // Draw segment
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+        ctx.closePath();
+        ctx.fillStyle = seg.color;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(201, 160, 220, 0.3)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Draw label
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(startAngle + arcSize / 2);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = seg.points === 0 ? '#ff6b6b' : '#fff';
+        ctx.font = seg.points === 0 ? 'bold 13px Inter' : 'bold 16px Inter';
+        ctx.fillText(seg.points === 0 ? '😢' : seg.label, radius * 0.7, 5);
+        ctx.restore();
+    });
+
+    // Draw center circle
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 28, 0, 2 * Math.PI);
+    ctx.fillStyle = '#1a1625';
+    ctx.fill();
+    ctx.strokeStyle = '#c9a0dc';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Center text
+    ctx.fillStyle = '#c9a0dc';
+    ctx.font = 'bold 11px Inter';
+    ctx.textAlign = 'center';
+    ctx.fillText('SPIN', centerX, centerY + 4);
+
+    // Outer ring
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius + 5, 0, 2 * Math.PI);
+    ctx.strokeStyle = 'rgba(201, 160, 220, 0.4)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+}
+
+drawWheel();
+
+async function spinWheel() {
+    if (isSpinning) return;
+    isSpinning = true;
+
+    const btn = document.getElementById('spinBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Spinning...';
+
+    try {
+        const res = await fetch('/rewards/spin', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        const data = await res.json();
+
+        if (data.error) {
+            alert(data.error);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-star"></i> SPIN NOW!';
+            isSpinning = false;
+            return;
+        }
+
+        // Animate the wheel
+        const segIndex = data.segmentIndex;
+        const arcSize = (2 * Math.PI) / segments.length;
+        // Target angle: the segment should be at the top (pointer position)
+        const targetAngle = -(segIndex * arcSize + arcSize / 2) + Math.PI * 2 * (5 + Math.random() * 3); // 5-8 full rotations
+        const duration = 4000;
+        const startTime = Date.now();
+        const startAngle = currentAngle;
+
+        function animate() {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            // Ease out cubic
+            const eased = 1 - Math.pow(1 - progress, 3);
+            currentAngle = startAngle + (targetAngle - startAngle) * eased;
+            drawWheel(currentAngle);
+
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            } else {
+                // Show result
+                showResult(data.points, data.totalPoints, data.nextSpinTime);
+                isSpinning = false;
+            }
+        }
+        animate();
+
+    } catch (err) {
+        alert('Spin failed. Please try again.');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-star"></i> SPIN NOW!';
+        isSpinning = false;
+    }
+}
+
+function showResult(points, totalPoints, nextSpinTime) {
+    const result = document.getElementById('spinResult');
+    const icon = document.getElementById('resultIcon');
+    const text = document.getElementById('resultText');
+    const next = document.getElementById('resultNext');
+
+    result.classList.remove('hidden');
+
+    if (points > 0) {
+        icon.innerHTML = '<i class="fas fa-gift" style="color: #c9a0dc; font-size: 2.5rem;"></i>';
+        text.innerHTML = `<span class="win-text">🎉 You won <strong>${points}</strong> reward points!</span><br><small>Worth ₹${points} — expires in 7 days</small>`;
+    } else {
+        icon.innerHTML = '<i class="fas fa-sad-tear" style="color: #ff6b6b; font-size: 2.5rem;"></i>';
+        text.innerHTML = `<span class="lose-text">😢 Oops! No reward points this time.</span><br><small>Better luck next spin!</small>`;
+    }
+
+    // Show next spin time
+    document.getElementById('totalPoints').textContent = totalPoints;
+    // Update balance display
+    const balVal = document.querySelector('.balance-value');
+    if (balVal) balVal.textContent = '= ₹' + totalPoints;
+
+    // Start countdown
+    next.innerHTML = '<i class="fas fa-clock"></i> Come back in <strong><%= cooldownHours %> hours</strong> for your next spin!';
+
+    // Hide spin button, show countdown
+    const btn = document.getElementById('spinBtn');
+    btn.outerHTML = `<button class="btn btn-glass btn-lg btn-full spin-btn" disabled>
+        <i class="fas fa-clock"></i> <span id="countdownText">Next spin available soon...</span>
+    </button>`;
+
+    if (nextSpinTime) startCountdown(nextSpinTime);
+}
+
+<% if (!canSpin && nextSpinTime) { %>
+// Start countdown on page load
+startCountdown('<%= nextSpinTime %>');
+<% } %>
+
+function startCountdown(targetTime) {
+    const target = new Date(targetTime).getTime();
+
+    function update() {
+        const now = Date.now();
+        const diff = target - now;
+
+        if (diff <= 0) {
+            // Spin available — reload page
+            location.reload();
+            return;
+        }
+
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+        const cdH = document.getElementById('cdHours');
+        const cdM = document.getElementById('cdMinutes');
+        const cdS = document.getElementById('cdSeconds');
+        const cdText = document.getElementById('countdownText');
+
+        if (cdH) cdH.textContent = String(hours).padStart(2, '0');
+        if (cdM) cdM.textContent = String(minutes).padStart(2, '0');
+        if (cdS) cdS.textContent = String(seconds).padStart(2, '0');
+        if (cdText) cdText.textContent = `Come back in ${hours}h ${minutes}m ${seconds}s`;
+
+        requestAnimationFrame(update);
+    }
+    update();
+}
+</script>
+
+<%- include('partials/footer') %>

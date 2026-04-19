@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../config/db');
 const { isAuthenticated } = require('../middleware/auth');
 
-// POST Create Review
+// POST Create Review — allows multiple reviews per user per product
 router.post('/', isAuthenticated, async (req, res) => {
     try {
         const { productId, rating, comment } = req.body;
@@ -14,27 +14,12 @@ router.post('/', isAuthenticated, async (req, res) => {
             return res.redirect('back');
         }
 
-        // Check if user already reviewed this product
-        const [existing] = await db.query(
-            'SELECT review_id FROM Review WHERE Cust_id = ? AND Product_id = ?',
-            [userId, productId]
+        // Always create a new review (multiple reviews allowed)
+        await db.query(
+            'INSERT INTO Review (Cust_id, Product_id, Rating, Comment) VALUES (?, ?, ?, ?)',
+            [userId, productId, rating, comment || null]
         );
-
-        if (existing.length > 0) {
-            // Update existing review
-            await db.query(
-                'UPDATE Review SET Rating = ?, Comment = ? WHERE Cust_id = ? AND Product_id = ?',
-                [rating, comment || null, userId, productId]
-            );
-            req.flash('success', 'Review updated successfully!');
-        } else {
-            // Create new review
-            await db.query(
-                'INSERT INTO Review (Cust_id, Product_id, Rating, Comment) VALUES (?, ?, ?, ?)',
-                [userId, productId, rating, comment || null]
-            );
-            req.flash('success', 'Review submitted successfully!');
-        }
+        req.flash('success', 'Review submitted successfully! ⭐');
 
         res.redirect(`/products/${productId}`);
     } catch (err) {

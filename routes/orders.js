@@ -94,9 +94,28 @@ router.post('/create', isAuthenticated, async (req, res) => {
             );
             // Clear cart
             await connection.query('DELETE FROM Cart WHERE Cust_id = ?', [userId]);
+
+            // Award reward points: 10 points per ₹100 spent
+            const rewardPoints = Math.floor(subtotal / 100) * 10;
+            if (rewardPoints > 0) {
+                await connection.query(
+                    'UPDATE Customer SET Reward_points = Reward_points + ? WHERE Cust_id = ?',
+                    [rewardPoints, userId]
+                );
+                await connection.query(
+                    'INSERT INTO Reward_log (Cust_id, Points, Type, Description) VALUES (?, ?, ?, ?)',
+                    [userId, rewardPoints, 'order', `Earned ${rewardPoints} points from Order #${orderId} (₹${subtotal.toLocaleString('en-IN')} spent)`]
+                );
+                // Update session
+                if (req.session.user) {
+                    req.session.user.Reward_points = (req.session.user.Reward_points || 0) + rewardPoints;
+                }
+            }
+
             await connection.commit();
 
-            req.flash('success', `Order placed successfully! Order ID: #${orderId} | Transaction: ${transactionId}`);
+            const pointsMsg = rewardPoints > 0 ? ` | Earned ${rewardPoints} reward points! 🎉` : '';
+            req.flash('success', `Order placed successfully! Order ID: #${orderId} | Transaction: ${transactionId}${pointsMsg}`);
             res.redirect(`/orders/${orderId}`);
         } else {
             await connection.query(

@@ -47,6 +47,8 @@ app.use(async (req, res, next) => {
             );
             req.session.cartCount = rows[0].count;
             res.locals.cartCount = rows[0].count;
+            // Pass reward points to all views
+            res.locals.rewardPoints = req.session.user.Reward_points || 0;
         } catch (err) {
             // silently continue
         }
@@ -63,6 +65,7 @@ const reviewRoutes = require('./routes/reviews');
 const assistantRoutes = require('./routes/assistant');
 const cartRoutes = require('./routes/cart');
 const productImageRoutes = require('./routes/productImage');
+const rewardsRoutes = require('./routes/rewards');
 
 app.use('/auth', authRoutes);
 app.use('/quiz', quizRoutes);
@@ -72,6 +75,7 @@ app.use('/reviews', reviewRoutes);
 app.use('/assistant', assistantRoutes);
 app.use('/cart', cartRoutes);
 app.use('/product-image', productImageRoutes);
+app.use('/rewards', rewardsRoutes);
 
 // Home Page
 app.get('/', async (req, res) => {

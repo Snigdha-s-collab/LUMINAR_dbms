@@ -48,6 +48,10 @@
 
             <div class="nav-actions">
                 <% if (user) { %>
+                    <a href="/rewards" class="nav-icon-btn rewards-nav-btn" title="Rewards" id="rewardsNavBtn">
+                        <i class="fas fa-coins"></i>
+                        <span class="rewards-badge" id="rewardsBadge"><%= typeof rewardPoints !== 'undefined' ? rewardPoints : 0 %></span>
+                    </a>
                     <a href="/cart" class="nav-icon-btn" title="Cart">
                         <i class="fas fa-shopping-bag"></i>
                         <% if (cartCount > 0) { %>
@@ -71,6 +75,7 @@
                             <div class="dropdown-divider"></div>
                             <a href="/profile" class="dropdown-item"><i class="fas fa-user"></i> My Profile</a>
                             <a href="/orders" class="dropdown-item"><i class="fas fa-box"></i> My Orders</a>
+                            <a href="/rewards" class="dropdown-item"><i class="fas fa-coins"></i> Rewards & Spin</a>
                             <a href="/assistant" class="dropdown-item"><i class="fas fa-robot"></i> AI Assistant</a>
                             <a href="/quiz" class="dropdown-item"><i class="fas fa-redo"></i> Retake Quiz</a>
                             <div class="dropdown-divider"></div>

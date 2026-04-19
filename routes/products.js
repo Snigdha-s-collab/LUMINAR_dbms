@@ -129,15 +129,8 @@ router.get('/:id', async (req, res) => {
             LIMIT 4
         `, [req.params.id, product.Category, product.P_Skin_type]);
 
-        // Check if current user can review
-        let canReview = false;
-        if (req.session.user) {
-            const [existingReview] = await db.query(
-                'SELECT review_id FROM Review WHERE Cust_id = ? AND Product_id = ?',
-                [req.session.user.Cust_id, req.params.id]
-            );
-            canReview = existingReview.length === 0;
-        }
+        // Always allow logged-in users to review (multiple reviews allowed)
+        let canReview = !!req.session.user;
 
         // Calculate rating distribution
         const ratingDist = [0, 0, 0, 0, 0];

@@ -108,6 +108,20 @@ async function initialize() {
         }
     }
 
+    // Migrate: add reward columns if missing
+    try {
+        const cols = db.exec("PRAGMA table_info(Customer)");
+        const colNames = cols[0]?.values.map(v => v[1]) || [];
+        if (!colNames.includes('Reward_points')) {
+            db.run("ALTER TABLE Customer ADD COLUMN Reward_points INTEGER DEFAULT 0");
+            console.log('✅ Added Reward_points column to Customer');
+        }
+        if (!colNames.includes('Last_spin_at')) {
+            db.run("ALTER TABLE Customer ADD COLUMN Last_spin_at TEXT DEFAULT NULL");
+            console.log('✅ Added Last_spin_at column to Customer');
+        }
+    } catch (e) { /* columns already exist */ }
+
     saveDatabase();
 }
 
@@ -150,7 +164,22 @@ function createTables() {
             Phone TEXT,
             Skin_concerns TEXT,
             Profile_image TEXT DEFAULT '/images/default-avatar.png',
+            Reward_points INTEGER DEFAULT 0,
+            Last_spin_at TEXT DEFAULT NULL,
             Created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS Reward_log (
+            Log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            Cust_id INTEGER NOT NULL,
+            Points INTEGER NOT NULL,
+            Type TEXT NOT NULL,
+            Description TEXT,
+            Created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            Expires_at TEXT DEFAULT NULL,
+            FOREIGN KEY (Cust_id) REFERENCES Customer(Cust_id) ON DELETE CASCADE
         )
     `);
 
